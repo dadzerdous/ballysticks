@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wall Stick Climber</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none; /* Prevent text highlighting */
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+        }
+        h1 { margin: 0; font-size: 20px; }
+        p { margin: 5px 0; font-size: 14px; color: #888; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <h1 id="score">Height: 0</h1>
+    <p>1. Drag & Release to Fling</p>
+    <p>2. Hold Mouse while in air to Stick to walls</p>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- Game Configuration ---
+    let width, height;
+    const gravity = 0.4;
+    const friction = 0.99;
+    const wallFriction = 0.8; // Slide down slowly if not holding?
+    const launchPower = 0.15; 
+    const maxPullDistance = 200;
+    
+    // --- Camera/World State ---
+    let cameraY = 0;
+    let score = 0;
+    let gameOver = false;
+
+    // --- Mouse Input ---
+    const mouse = { x: 0, y: 0, isDown: false };
+
+    // --- The Player Ball ---
+    const ball = {
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        radius: 15,
+        isStuck: true,
+        stuckSide: 'left', // 'left' or 'right' or null
+        color: '#00ffcc'
+    };
+
+    // --- Initialization ---
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+        // Reset ball if it's the first load
+        if (ball.x === 0 && ball.y === 0) resetGame();
+    }
+
+    function resetGame() {
+        ball.radius = 15;
+        ball.x = 30; // Start on left wall
+        ball.y = height - 100;
+        ball.vx = 0;
+        ball.vy = 0;
+        ball.isStuck = true;
+        ball.stuckSide = 'left';
+        cameraY = 0;
+        score = 0;
+        gameOver = false;
+        ball.color = '#00ffcc';
+    }
+
+    window.addEventListener('resize', resize);
+    
+    // --- Input Listeners ---
+    window.addEventListener('mousedown', () => mouse.isDown = true);
+    window.addEventListener('mouseup', () => {
+        mouse.isDown = false;
+        
+        // FLING MECHANIC
+        if (ball.isStuck && !gameOver) {
+            flingBall();
+        }
+    });
+    window.addEventListener('mousemove', (e) => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    });
+
+    // --- Physics & Logic ---
+
+    function flingBall() {
+        // Calculate vector from ball to mouse
+        let dx = mouse.x - ball.x;
+        // Adjust mouse Y for camera position relative to ball
+        let relativeMouseY = mouse.y; 
+        // Logic: Pulling DOWN (positive Y) should shoot UP (negative Y)
+        // We use the "Slingshot" method: Pull back to shoot forward
+        
+        // Vector from Mouse -> Ball (The direction we want to go)
+        let vectorX = ball.x - mouse.x;
+        let vectorY = (ball.y - cameraY) - mouse.y; // visual y minus mouse y
+
+        // Cap the power
+        const dist = Math.sqrt(vectorX * vectorX + vectorY * vectorY);
+        const force = Math.min(dist, maxPullDistance) * launchPower;
+        const angle = Math.atan2(vectorY, vectorX);
+
+        ball.vx = Math.cos(angle) * force;
+        ball.vy = Math.sin(angle) * force;
+
+        ball.isStuck = false;
+        ball.stuckSide = null;
+        ball.color = '#ffeb3b'; // Yellow when flying
+    }
+
+    function update() {
+        if (gameOver) return;
+
+        // 1. Apply Gravity if in air
+        if (!ball.isStuck) {
+            ball.vy += gravity;
+            ball.vx *= friction;
+            ball.vy *= friction;
+            
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+        }
+
+        // 2. Wall Collision & Sticking Logic
+        // Left Wall
+        if (ball.x - ball.radius <= 0) {
+            ball.x = ball.radius; // Clamp position
+            if (mouse.isDown) {
+                stickToWall('left');
+            } else {
+                ball.vx *= -0.6; // Bounce if not holding
+            }
+        }
+        
+        // Right Wall
+        if (ball.x + ball.radius >= width) {
+            ball.x = width - ball.radius; // Clamp position
+            if (mouse.isDown) {
+                stickToWall('right');
+            } else {
+                ball.vx *= -0.6; // Bounce if not holding
+            }
+        }
+
+        // 3. Camera Follow
+        // We want the ball to stay in the lower-middle area. 
+        // If ball goes high (low Y value), we decrease cameraY (move world down)
+        const targetY = ball.y - height * 0.7; 
+        // Smoothly interpolate camera
+        cameraY += (targetY - cameraY) * 0.1;
+
+        // Update Score (inverted Y axis, deeper negative is higher up)
+        // Let's make score positive based on distance traveled up
+        let currentHeight = Math.floor(Math.abs(ball.y - (height - 100)) / 10);
+        if (currentHeight > score) score = currentHeight;
+
+        // 4. Death Condition (Fall off bottom of screen)
+        if (ball.y - cameraY > height + 50) {
+            gameOver = true;
+            setTimeout(resetGame, 1000);
+        }
+    }
+
+    function stickToWall(side) {
+        if (!ball.isStuck) {
+            ball.isStuck = true;
+            ball.stuckSide = side;
+            ball.vx = 0;
+            ball.vy = 0;
+            ball.color = '#00ffcc'; // Green when stuck
+        }
+    }
+
+    // --- Rendering ---
+    function draw() {
+        // Clear screen
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw Walls (Visual only)
+        ctx.fillStyle = '#333';
+        ctx.fillRect(0, 0, 10, height);
+        ctx.fillRect(width - 10, 0, 10, height);
+
+        ctx.save();
+        // Apply Camera Offset
+        ctx.translate(0, -cameraY);
+
+        // Draw Trajectory Line (Only if stuck and holding mouse)
+        if (ball.isStuck && mouse.isDown && !gameOver) {
+            drawTrajectory();
+        }
+
+        // Draw Ball
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = ball.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.closePath();
+
+        // Draw "Sparks" or indicators if sticking (optional visual flair)
+        if (ball.isStuck) {
+            ctx.fillStyle = '#fff';
+            let sparkX = ball.stuckSide === 'left' ? ball.x - ball.radius : ball.x + ball.radius;
+            ctx.fillRect(sparkX - 2, ball.y - 5, 4, 10);
+        }
+
+        ctx.restore();
+
+        // Update UI
+        document.getElementById('score').innerText = `Height: ${score}`;
+        if (gameOver) {
+            ctx.fillStyle = 'red';
+            ctx.font = '40px Courier';
+            ctx.textAlign = 'center';
+            ctx.fillText("FALLEN", width/2, height/2);
+        }
+    }
+
+    function drawTrajectory() {
+        ctx.beginPath();
+        ctx.moveTo(ball.x, ball.y);
+        
+        // Calculate the vector exactly like the launch logic
+        let vectorX = ball.x - mouse.x;
+        let vectorY = (ball.y - cameraY) - mouse.y;
+
+        // Visual multiplier to show path length
+        ctx.lineTo(ball.x + vectorX, ball.y + vectorY);
+        
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 10]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.closePath();
+    }
+
+    // --- Game Loop ---
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    // Start
+    resize();
+    loop();
+
+</script>
+</body>
+</html>
