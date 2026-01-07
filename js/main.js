@@ -2,7 +2,7 @@ import { Config, GameState, Utils } from './config.js';
 import { Physics } from './physics.js';
 import { LevelMaker } from './level.js';
 import { Ball } from './ball.js';
-import { ParticleSystem } from './particles.js'; // NEW IMPORT
+import { ParticleSystem } from './particles.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -14,7 +14,7 @@ const uiBest = document.getElementById('best-score');
 const uiBits = document.getElementById('bits');
 
 let width, height;
-let ball, level, particles; // Added particles
+let ball, level, particles;
 
 class Game {
     constructor() {
@@ -31,10 +31,13 @@ class Game {
         resize();
         ball = new Ball(width/2, height - 50);
         level = new LevelMaker(width, height);
-        particles = new ParticleSystem(); // Initialize
+        particles = new ParticleSystem();
         level.reset();
+        
+        this.setupShop(); // Initialize Shop Listeners
         this.updateCoinUI();
         this.enterLobby();
+        
         loop();
     }
 
@@ -43,21 +46,102 @@ class Game {
         this.cameraY = 0;
         this.score = 0;
         
+        // Apply persistent skin color
+        ball.color = GameState.activeColor;
+        
         ball.x = width/2; ball.y = height-50;
         ball.vx = 0; ball.vy = 0;
         ball.isStuck = true; 
         ball.stuckSide = 'floor'; 
-        ball.color = '#00ffcc';
         
         level.reset();
         particles.clear();
         this.updateUI();
+        
+        // Show Shop Button
+        document.getElementById('open-shop-btn').style.display = 'block';
+    }
+
+    setupShop() {
+        const shopMenu = document.getElementById('shop-menu');
+        const openBtn = document.getElementById('open-shop-btn');
+        const closeBtn = document.getElementById('close-shop');
+        const colorList = document.getElementById('color-list');
+
+        const availableColors = [
+            { hex: '#00ffcc', price: 0 },
+            { hex: '#ff0055', price: 50 },
+            { hex: '#ffeb3b', price: 100 },
+            { hex: '#bf00ff', price: 200 },
+            { hex: '#ffffff', price: 500 }
+        ];
+
+        openBtn.onclick = (e) => {
+            e.stopPropagation(); // Stop click from starting game
+            this.inputDown = false;
+            shopMenu.style.display = 'block';
+            document.getElementById('shop-bits').innerText = `Bits: ${GameState.currency}`;
+            this.renderColors(availableColors, colorList);
+        };
+
+        closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            shopMenu.style.display = 'none';
+        };
+    }
+
+    renderColors(colors, container) {
+        container.innerHTML = '';
+        colors.forEach(c => {
+            const btn = document.createElement('div');
+            const isUnlocked = GameState.unlockedColors.includes(c.hex);
+            const isActive = GameState.activeColor === c.hex;
+
+            btn.style.width = '45px';
+            btn.style.height = '45px';
+            btn.style.background = c.hex;
+            btn.style.border = isActive ? '3px solid white' : '1px solid #444';
+            btn.style.cursor = 'pointer';
+            btn.style.display = 'flex';
+            btn.style.alignItems = 'center';
+            btn.style.justifyContent = 'center';
+            btn.style.fontSize = '12px';
+            btn.style.color = 'black';
+            btn.style.fontWeight = 'bold';
+            
+            btn.innerText = isUnlocked ? '' : c.price;
+
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                if (isUnlocked) {
+                    GameState.activeColor = c.hex;
+                    ball.color = c.hex;
+                } else if (GameState.currency >= c.price) {
+                    GameState.currency -= c.price;
+                    GameState.unlockedColors.push(c.hex);
+                    GameState.activeColor = c.hex;
+                    ball.color = c.hex;
+                }
+                GameState.save();
+                this.updateCoinUI();
+                document.getElementById('shop-bits').innerText = `Bits: ${GameState.currency}`;
+                this.renderColors(colors, container);
+            };
+            container.appendChild(btn);
+        });
     }
 
     handleInput(isDown) {
         if (isDown) {
+            // Block game start if clicking inside shop
+            if (document.getElementById('shop-menu').style.display === 'block') return;
+            
             if (this.state === 2) { this.enterLobby(); return; }
-            if (this.state === 0) { this.state = 1; this.updateUI(); }
+            if (this.state === 0) { 
+                this.state = 1; 
+                document.getElementById('open-shop-btn').style.display = 'none';
+                this.updateUI(); 
+            }
             this.inputDown = true;
         } else {
             this.inputDown = false;
@@ -71,13 +155,12 @@ class Game {
         if (this.inputDown) this.updateAim();
 
         ball.update();
-        particles.update(); // Update particles
+        particles.update();
+        level.update();
 
         // Screen Walls
         if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.5; }
         if (ball.x > width - ball.radius) { ball.x = width - ball.radius; ball.vx *= -0.5; }
-
-        level.update();
 
         // Building Collisions
         for (let b of level.buildings) {
@@ -86,38 +169,30 @@ class Game {
                 let side = Physics.resolve(ball, b);
                 
                 if (this.inputDown) {
-                    // STICK
-                    if (!ball.isStuck) {
-                        // Impact Dust!
-                        particles.emit(ball.x, ball.y, '#ffffff', 8, 4);
-                    }
+                    if (!ball.isStuck) particles.emit(ball.x, ball.y, '#ffffff', 8, 4);
                     ball.isStuck = true;
                     ball.gripTimer = 0; 
                     ball.vx = 0; ball.vy = 0;
                     ball.stuckObject = b;
                     ball.stuckSide = side;
-                    ball.color = '#00ffcc';
+                    ball.color = GameState.activeColor;
                 } else {
                     ball.bounce(side);
-                    // Bounce Dust!
                     particles.emit(ball.x, ball.y, '#aaaaaa', 5, 2);
                 }
                 break;
             }
         }
 
-                // FIXED: Stick to Moving Wall Logic
+        // Stick to Moving Wall Logic - FIX for "Ghost" sliding
         if (ball.isStuck && ball.stuckObject && ball.stuckObject.vx) {
              if (ball.stuckObject.type === 'left') {
-                 // Left wall changes width, so we stick to the RIGHT edge of the wall
                  ball.x = ball.stuckObject.w + ball.radius; 
              }
              else if (ball.stuckObject.type === 'right') {
-                 // Right wall shifts X, so we stick to the LEFT edge of the wall
                  ball.x = ball.stuckObject.x - ball.radius;
              }
         }
-
 
         // Coin Collection
         for (let c of level.coins) {
@@ -130,8 +205,7 @@ class Game {
                     GameState.currency++;
                     GameState.save();
                     this.updateCoinUI();
-                    // Gold Sparkles!
-                    particles.emit(c.x, c.y, '#FFD700', 10, 5);
+                    particles.emit(c.x, c.y, '#FFD700', 12, 5);
                 }
             }
         }
@@ -150,18 +224,9 @@ class Game {
 
     updateAim() {
         this.aimAngle += Config.aimSpeed * this.aimDir;
-        
-        let min = -Math.PI + 0.1; 
-        let max = -0.1;
-        
-        if (ball.stuckSide === 'left_wall') {
-            min = -Math.PI / 2; 
-            max = 0;
-        } 
-        else if (ball.stuckSide === 'right_wall') {
-            min = -Math.PI;
-            max = -Math.PI / 2;
-        }
+        let min = -Math.PI + 0.1, max = -0.1;
+        if (ball.stuckSide === 'left_wall') { min = -Math.PI / 2; max = 0; } 
+        else if (ball.stuckSide === 'right_wall') { min = -Math.PI; max = -Math.PI / 2; }
         
         if (this.aimAngle > max) { this.aimAngle = max; this.aimDir = -1; }
         if (this.aimAngle < min) { this.aimAngle = min; this.aimDir = 1; }
@@ -180,9 +245,7 @@ class Game {
     }
 
     gameOver() {
-        // Death Explosion!
-        particles.emit(ball.x, ball.y, ball.color, 30, 8);
-        
+        particles.emit(ball.x, ball.y, ball.color, 35, 10);
         this.state = 2;
         if (this.score > this.bestScore) {
             this.bestScore = this.score;
@@ -206,11 +269,9 @@ class Game {
         ctx.fillRect(0, 0, width, height);
 
         ctx.save();
-        
         level.draw(ctx, this.cameraY, this.score);
-        particles.draw(ctx, this.cameraY); // Draw particles
+        particles.draw(ctx, this.cameraY);
 
-        // Draw Aim Line (Dashed Laser)
         if (this.state === 1 && this.inputDown && ball.isStuck) {
             ctx.beginPath();
             ctx.moveTo(ball.x, ball.y - this.cameraY);
@@ -220,24 +281,14 @@ class Game {
                 sx += svx; sy += svy;
                 ctx.lineTo(sx, sy - this.cameraY);
             }
-            ctx.strokeStyle = '#ff0055'; 
-            ctx.lineWidth = 3; 
-            ctx.setLineDash([5, 5]); // Dashed line
-            ctx.stroke();
-            ctx.setLineDash([]); // Reset
+            ctx.strokeStyle = '#ff0055'; ctx.lineWidth = 3; ctx.setLineDash([5, 8]); ctx.stroke(); ctx.setLineDash([]);
         }
 
-        // Only draw player if alive (or allow particles to show death)
-        if (this.state !== 2) {
-            ball.draw(ctx, this.cameraY);
-        }
-
+        if (this.state !== 2) ball.draw(ctx, this.cameraY);
         ctx.restore();
 
         if (this.state === 2) {
-            // Delay the Game Over screen slightly so we see the explosion?
-            // For now, just transparent overlay
-            ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0,0,width,height);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,width,height);
             ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '30px Courier';
             ctx.fillText("FALLEN", width/2, height/2);
         }
