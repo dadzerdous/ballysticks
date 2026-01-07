@@ -5,7 +5,7 @@ export class LevelMaker {
         this.width = width;
         this.height = height;
         this.buildings = [];
-        this.coins = []; // Array to store currency
+        this.coins = []; 
         this.spawnerY = height;
     }
 
@@ -19,7 +19,9 @@ export class LevelMaker {
     }
 
     generate(cameraY) {
-        const genThreshold = cameraY - this.height; 
+        // Generate continuously ahead of the camera
+        // We want to generate screens ahead (e.g., 2 screens worth)
+        const genThreshold = cameraY - (this.height * 2); 
         
         while (this.spawnerY > genThreshold) {
             let centerX;
@@ -34,10 +36,12 @@ export class LevelMaker {
             const verticalGap = Utils.random(40, 80);
 
             // MOVING WALL LOGIC
-            // Only start moving walls if we are high up (Height < -600 roughly)
+            // Start moving walls earlier (at height 500 aka "Skyline")
             let moveSpeed = 0;
-            if (Math.abs(this.spawnerY) > 1000) { // Start moving at height 100
-                moveSpeed = Utils.random(0.5, 2.0); 
+            if (Math.abs(this.spawnerY) > 500) { 
+                // Speed increases slightly as you go higher
+                let difficultyMult = Math.min(2.0, 1 + (Math.abs(this.spawnerY) / 10000));
+                moveSpeed = Utils.random(0.5, 1.5) * difficultyMult; 
                 if (Math.random() > 0.5) moveSpeed *= -1;
             }
 
@@ -47,19 +51,19 @@ export class LevelMaker {
             const rightX = centerX + (gapWidth / 2);
             const rightW = this.width - rightX;
 
-            // Add Buildings with velocity (vx)
+            // Add Buildings
+            // originX is used to keep the building tethered to its starting spot
             if (leftW > 0) this.buildings.push({ 
                 x: 0, y: this.spawnerY - blockHeight, w: leftW, h: blockHeight, 
-                vx: moveSpeed, originX: 0, maxMove: 50 
+                vx: moveSpeed, originW: leftW, maxMove: 60, type: 'left'
             });
             
             if (rightW > 0) this.buildings.push({ 
                 x: rightX, y: this.spawnerY - blockHeight, w: rightW, h: blockHeight, 
-                vx: moveSpeed, originX: rightX, maxMove: 50 
+                vx: moveSpeed, originX: rightX, maxMove: 60, type: 'right'
             });
 
             // COIN GENERATION
-            // 30% chance to spawn a coin in the gap
             if (Math.random() < 0.3) {
                 this.coins.push({
                     x: centerX,
@@ -72,30 +76,32 @@ export class LevelMaker {
             this.spawnerY -= blockHeight;
         }
 
-        // Cleanup
-        this.buildings = this.buildings.filter(b => b.y - cameraY < this.height + 600);
-        this.coins = this.coins.filter(c => c.y - cameraY < this.height + 600);
+        // Cleanup objects far below the camera
+        const cleanupThreshold = cameraY + this.height + 200;
+        this.buildings = this.buildings.filter(b => b.y < cleanupThreshold);
+        this.coins = this.coins.filter(c => c.y < cleanupThreshold);
     }
 
     update() {
         // Update Moving Walls
         for (let b of this.buildings) {
             if (b.vx !== 0) {
-                b.x += b.vx;
-                b.w += b.vx; // Keep attached to screen edge if needed, or just shift
-                
-                // For simplicity in this engine: 
-                // Left walls expand/contract. Right walls shift left/right.
-                
-                // Left Wall Logic (Anchored at 0)
-                if (b.x === 0) {
-                    if (b.w > b.originX + 100 || b.w < b.originX - 50) b.vx *= -1;
+                if (b.type === 'left') {
+                    // Left walls expand and contract their WIDTH
+                    b.w += b.vx;
+                    // Bounce logic
+                    if (b.w > b.originW + b.maxMove || b.w < b.originW - b.maxMove) b.vx *= -1;
+                    // Safety Clamp (Don't let it disappear)
+                    if (b.w < 10) { b.w = 10; b.vx = Math.abs(b.vx); }
                 } 
-                // Right Wall Logic
-                else {
-                    // Reset bounds check for right wall
-                    // Simple oscillation: bounce back and forth
-                    // Actually, simpler logic: Just oscillate width
+                else if (b.type === 'right') {
+                    // Right walls shift their X position and adjust WIDTH to fill screen
+                    b.x += b.vx;
+                    b.w = this.width - b.x;
+                    // Bounce logic
+                    if (b.x > b.originX + b.maxMove || b.x < b.originX - b.maxMove) b.vx *= -1;
+                    // Safety Clamp
+                    if (b.w < 10) { b.x = this.width - 10; b.vx = -Math.abs(b.vx); }
                 }
             }
         }
@@ -118,14 +124,13 @@ export class LevelMaker {
         }
 
         // Draw Coins
-        ctx.fillStyle = '#FFD700'; // Gold
+        ctx.fillStyle = '#FFD700';
         ctx.shadowBlur = 10;
         ctx.shadowColor = '#FFD700';
         for (let c of this.coins) {
             if (c.collected) continue;
             const drawY = c.y - cameraY;
             
-            // Bobbing animation
             const float = Math.sin(Date.now() / 200) * 3;
             
             ctx.beginPath();
