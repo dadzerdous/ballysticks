@@ -2,36 +2,37 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wall Stick Climber</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Building Climber</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #1a1a1a;
+            background-color: #111;
             color: #fff;
             font-family: 'Courier New', Courier, monospace;
-            user-select: none; /* Prevent text highlighting */
+            touch-action: none; /* Vital for mobile */
+            user-select: none;
         }
-        canvas {
-            display: block;
-        }
+        canvas { display: block; }
         #ui {
             position: absolute;
             top: 20px;
             left: 20px;
             pointer-events: none;
+            z-index: 10;
         }
-        h1 { margin: 0; font-size: 20px; }
-        p { margin: 5px 0; font-size: 14px; color: #888; }
+        h1 { margin: 0; font-size: 20px; text-shadow: 1px 1px 2px black; color: #fff;}
+        p { margin: 5px 0; font-size: 14px; color: #aaa; text-shadow: 1px 1px 2px black;}
     </style>
 </head>
 <body>
 
 <div id="ui">
     <h1 id="score">Height: 0</h1>
-    <p>1. Drag & Release to Fling</p>
-    <p>2. Hold Mouse while in air to Stick to walls</p>
+    <p>1. HOLD to Aim (Line sweeps)</p>
+    <p>2. RELEASE to Jump</p>
+    <p>3. HOLD while falling to Stick</p>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -40,31 +41,33 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    // --- Game Configuration ---
+    // --- Configuration ---
     let width, height;
-    const gravity = 0.4;
-    const friction = 0.99;
-    const wallFriction = 0.8; // Slide down slowly if not holding?
-    const launchPower = 0.15; 
-    const maxPullDistance = 200;
+    const gravity = 0.45;
+    const friction = 0.98;
+    const jumpPower = 18; 
     
-    // --- Camera/World State ---
+    // --- Game State ---
     let cameraY = 0;
     let score = 0;
     let gameOver = false;
+    let buildings = [];
+    let buildingSpawnerY = 0; // Where to spawn the next building
+    let aimAngle = -Math.PI / 2; // Starts pointing up
+    let aimDirection = 1; // 1 = moving right, -1 = moving left
 
-    // --- Mouse Input ---
-    const mouse = { x: 0, y: 0, isDown: false };
+    // --- Input ---
+    const input = { isDown: false };
 
-    // --- The Player Ball ---
+    // --- The Ball ---
     const ball = {
         x: 0,
         y: 0,
         vx: 0,
         vy: 0,
-        radius: 15,
+        radius: 10,
         isStuck: true,
-        stuckSide: 'left', // 'left' or 'right' or null
+        stuckObject: null, // Reference to the rect we are stuck to
         color: '#00ffcc'
     };
 
@@ -72,149 +75,203 @@
     function resize() {
         width = canvas.width = window.innerWidth;
         height = canvas.height = window.innerHeight;
-        // Reset ball if it's the first load
-        if (ball.x === 0 && ball.y === 0) resetGame();
+        if (buildings.length === 0) resetGame();
     }
 
     function resetGame() {
-        ball.radius = 15;
-        ball.x = 30; // Start on left wall
+        cameraY = 0;
+        score = 0;
+        gameOver = false;
+        
+        // Setup Ball
+        ball.radius = 10;
+        ball.x = width / 2;
         ball.y = height - 100;
         ball.vx = 0;
         ball.vy = 0;
         ball.isStuck = true;
-        ball.stuckSide = 'left';
-        cameraY = 0;
-        score = 0;
-        gameOver = false;
+        ball.stuckObject = null;
         ball.color = '#00ffcc';
+
+        // Setup Buildings
+        buildings = [];
+        buildingSpawnerY = height; // Start spawning from bottom
+        
+        // Create a floor
+        buildings.push({
+            x: -50, y: height - 20, w: width + 100, h: 100, color: '#444'
+        });
+
+        // Generate initial set
+        generateBuildings(height - 20);
     }
 
-    window.addEventListener('resize', resize);
-    
-    // --- Input Listeners ---
-    window.addEventListener('mousedown', () => mouse.isDown = true);
-    window.addEventListener('mouseup', () => {
-        mouse.isDown = false;
-        
-        // FLING MECHANIC
-        if (ball.isStuck && !gameOver) {
-            flingBall();
+    // --- Building Generation ---
+    function generateBuildings(startY) {
+        // Generate buildings upwards (negative Y)
+        while (buildingSpawnerY > startY - height * 2) { // Keep buffer above screen
+            buildingSpawnerY -= (100 + Math.random() * 80); // Gap between buildings
+            
+            let bWidth = 60 + Math.random() * 150;
+            let bHeight = 40 + Math.random() * 100;
+            let bX = Math.random() * (width - bWidth);
+            
+            buildings.push({
+                x: bX,
+                y: buildingSpawnerY,
+                w: bWidth,
+                h: bHeight,
+                color: '#555'
+            });
         }
-    });
-    window.addEventListener('mousemove', (e) => {
-        mouse.x = e.clientX;
-        mouse.y = e.clientY;
-    });
-
-    // --- Physics & Logic ---
-
-    function flingBall() {
-        // Calculate vector from ball to mouse
-        let dx = mouse.x - ball.x;
-        // Adjust mouse Y for camera position relative to ball
-        let relativeMouseY = mouse.y; 
-        // Logic: Pulling DOWN (positive Y) should shoot UP (negative Y)
-        // We use the "Slingshot" method: Pull back to shoot forward
         
-        // Vector from Mouse -> Ball (The direction we want to go)
-        let vectorX = ball.x - mouse.x;
-        let vectorY = (ball.y - cameraY) - mouse.y; // visual y minus mouse y
+        // Remove buildings way below camera to save memory
+        buildings = buildings.filter(b => b.y - cameraY < height + 500);
+    }
 
-        // Cap the power
-        const dist = Math.sqrt(vectorX * vectorX + vectorY * vectorY);
-        const force = Math.min(dist, maxPullDistance) * launchPower;
-        const angle = Math.atan2(vectorY, vectorX);
+    // --- Input Handling ---
+    function handleStart() {
+        if (gameOver) { resetGame(); return; }
+        input.isDown = true;
+    }
+    
+    function handleEnd() {
+        input.isDown = false;
+        // If we were stuck and aiming, FIRE!
+        if (ball.isStuck) {
+            launchBall();
+        }
+    }
 
-        ball.vx = Math.cos(angle) * force;
-        ball.vy = Math.sin(angle) * force;
+    window.addEventListener('mousedown', handleStart);
+    window.addEventListener('mouseup', handleEnd);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleStart(); }, {passive:false});
+    canvas.addEventListener('touchend', (e) => { e.preventDefault(); handleEnd(); }, {passive:false});
 
+    // --- Logic ---
+
+    function launchBall() {
         ball.isStuck = false;
-        ball.stuckSide = null;
-        ball.color = '#ffeb3b'; // Yellow when flying
+        ball.stuckObject = null;
+        ball.color = '#ffeb3b'; // Yellow (Flying)
+        
+        ball.vx = Math.cos(aimAngle) * jumpPower;
+        ball.vy = Math.sin(aimAngle) * jumpPower;
+    }
+
+    function checkCollision(rect) {
+        // Simple AABB collision detection (Circle vs Rect)
+        // Find closest point on the rectangle to the center of the circle
+        let testX = ball.x;
+        let testY = ball.y;
+
+        if (ball.x < rect.x) testX = rect.x;      // Test left edge
+        else if (ball.x > rect.x + rect.w) testX = rect.x + rect.w;   // right edge
+        
+        if (ball.y < rect.y) testY = rect.y;      // top edge
+        else if (ball.y > rect.y + rect.h) testY = rect.y + rect.h;   // bottom edge
+
+        let distX = ball.x - testX;
+        let distY = ball.y - testY;
+        let distance = Math.sqrt((distX*distX) + (distY*distY));
+
+        return distance <= ball.radius;
     }
 
     function update() {
         if (gameOver) return;
 
-        // 1. Apply Gravity if in air
+        // 1. Aim Oscillation
+        // If holding input, sweep aim from 180 (PI) to 360 (2PI) roughly
+        // We want -10 deg to -170 deg
+        if (input.isDown) {
+            const speed = 0.08;
+            aimAngle += speed * aimDirection;
+            
+            // Bounds for aiming (Only upwards arc)
+            if (aimAngle > -0.2) { aimAngle = -0.2; aimDirection = -1; }
+            if (aimAngle < -Math.PI + 0.2) { aimAngle = -Math.PI + 0.2; aimDirection = 1; }
+        }
+
+        // 2. Physics
         if (!ball.isStuck) {
             ball.vy += gravity;
-            ball.vx *= friction;
+            ball.vx *= friction; // Air resistance
             ball.vy *= friction;
             
             ball.x += ball.vx;
             ball.y += ball.vy;
+
+            // Wall Collisions (Screen Edges)
+            if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.5; }
+            if (ball.x > width - ball.radius) { ball.x = width - ball.radius; ball.vx *= -0.5; }
+
+            // Building Collisions
+            if (input.isDown) { // ONLY stick if holding input
+                for (let b of buildings) {
+                    if (checkCollision(b)) {
+                        ball.isStuck = true;
+                        ball.vx = 0;
+                        ball.vy = 0;
+                        ball.stuckObject = b;
+                        ball.color = '#00ffcc'; // Green (Stuck)
+                        break;
+                    }
+                }
+            }
+        } else {
+            // If Stuck: Move with the object? (Not needed for static blocks)
+            // But we must clamp ball to the edge surface if needed?
+            // For this simple version, simply stopping velocity is enough visual feedback.
         }
 
-        // 2. Wall Collision & Sticking Logic
-        // Left Wall
-        if (ball.x - ball.radius <= 0) {
-            ball.x = ball.radius; // Clamp position
-            if (mouse.isDown) {
-                stickToWall('left');
-            } else {
-                ball.vx *= -0.6; // Bounce if not holding
-            }
+        // 3. Camera & World Generation
+        // Move camera if ball goes high
+        const targetY = ball.y - height * 0.6;
+        if (targetY < cameraY) {
+            cameraY += (targetY - cameraY) * 0.1;
         }
+        // Also move camera slowly down if we fall? No, let's keep it climbing only.
         
-        // Right Wall
-        if (ball.x + ball.radius >= width) {
-            ball.x = width - ball.radius; // Clamp position
-            if (mouse.isDown) {
-                stickToWall('right');
-            } else {
-                ball.vx *= -0.6; // Bounce if not holding
-            }
-        }
+        // Generate new buildings based on camera
+        generateBuildings(cameraY);
 
-        // 3. Camera Follow
-        // We want the ball to stay in the lower-middle area. 
-        // If ball goes high (low Y value), we decrease cameraY (move world down)
-        const targetY = ball.y - height * 0.7; 
-        // Smoothly interpolate camera
-        cameraY += (targetY - cameraY) * 0.1;
-
-        // Update Score (inverted Y axis, deeper negative is higher up)
-        // Let's make score positive based on distance traveled up
+        // Score
         let currentHeight = Math.floor(Math.abs(ball.y - (height - 100)) / 10);
         if (currentHeight > score) score = currentHeight;
 
-        // 4. Death Condition (Fall off bottom of screen)
-        if (ball.y - cameraY > height + 50) {
+        // Death
+        if (ball.y - cameraY > height + 100) {
             gameOver = true;
-            setTimeout(resetGame, 1000);
-        }
-    }
-
-    function stickToWall(side) {
-        if (!ball.isStuck) {
-            ball.isStuck = true;
-            ball.stuckSide = side;
-            ball.vx = 0;
-            ball.vy = 0;
-            ball.color = '#00ffcc'; // Green when stuck
         }
     }
 
     // --- Rendering ---
     function draw() {
-        // Clear screen
-        ctx.fillStyle = '#1a1a1a';
+        // Background
+        ctx.fillStyle = '#111';
         ctx.fillRect(0, 0, width, height);
 
-        // Draw Walls (Visual only)
-        ctx.fillStyle = '#333';
-        ctx.fillRect(0, 0, 10, height);
-        ctx.fillRect(width - 10, 0, 10, height);
-
         ctx.save();
-        // Apply Camera Offset
         ctx.translate(0, -cameraY);
 
-        // Draw Trajectory Line (Only if stuck and holding mouse)
-        if (ball.isStuck && mouse.isDown && !gameOver) {
-            drawTrajectory();
+        // Draw Buildings
+        ctx.fillStyle = '#666';
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 2;
+        for (let b of buildings) {
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.strokeRect(b.x, b.y, b.w, b.h);
+        }
+
+        // Draw Aim Line
+        if (input.isDown && ball.isStuck) {
+            ctx.beginPath();
+            ctx.moveTo(ball.x, ball.y);
+            ctx.lineTo(ball.x + Math.cos(aimAngle) * 100, ball.y + Math.sin(aimAngle) * 100);
+            ctx.strokeStyle = '#ff0055';
+            ctx.lineWidth = 3;
+            ctx.stroke();
         }
 
         // Draw Ball
@@ -225,54 +282,29 @@
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.closePath();
-
-        // Draw "Sparks" or indicators if sticking (optional visual flair)
-        if (ball.isStuck) {
-            ctx.fillStyle = '#fff';
-            let sparkX = ball.stuckSide === 'left' ? ball.x - ball.radius : ball.x + ball.radius;
-            ctx.fillRect(sparkX - 2, ball.y - 5, 4, 10);
-        }
 
         ctx.restore();
 
-        // Update UI
+        // UI
         document.getElementById('score').innerText = `Height: ${score}`;
+        
         if (gameOver) {
-            ctx.fillStyle = 'red';
-            ctx.font = '40px Courier';
+            ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
+            ctx.font = '30px Courier';
             ctx.fillText("FALLEN", width/2, height/2);
+            ctx.font = '16px Courier';
+            ctx.fillText("Tap to Restart", width/2, height/2 + 30);
         }
     }
 
-    function drawTrajectory() {
-        ctx.beginPath();
-        ctx.moveTo(ball.x, ball.y);
-        
-        // Calculate the vector exactly like the launch logic
-        let vectorX = ball.x - mouse.x;
-        let vectorY = (ball.y - cameraY) - mouse.y;
-
-        // Visual multiplier to show path length
-        ctx.lineTo(ball.x + vectorX, ball.y + vectorY);
-        
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 4;
-        ctx.setLineDash([10, 10]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.closePath();
-    }
-
-    // --- Game Loop ---
     function loop() {
         update();
         draw();
         requestAnimationFrame(loop);
     }
 
-    // Start
+    window.addEventListener('resize', resize);
     resize();
     loop();
 
