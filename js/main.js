@@ -2,6 +2,7 @@ import { Config, GameState, Utils } from './config.js';
 import { Physics } from './physics.js';
 import { LevelMaker } from './level.js';
 import { Ball } from './ball.js';
+import { ParticleSystem } from './particles.js'; // NEW IMPORT
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -10,11 +11,10 @@ const uiScore = document.getElementById('score');
 const uiStatus = document.getElementById('status');
 const uiZone = document.getElementById('zone-name');
 const uiBest = document.getElementById('best-score');
-// NEW: Grab the element from HTML instead of creating it
 const uiBits = document.getElementById('bits');
 
 let width, height;
-let ball, level;
+let ball, level, particles; // Added particles
 
 class Game {
     constructor() {
@@ -31,6 +31,7 @@ class Game {
         resize();
         ball = new Ball(width/2, height - 50);
         level = new LevelMaker(width, height);
+        particles = new ParticleSystem(); // Initialize
         level.reset();
         this.updateCoinUI();
         this.enterLobby();
@@ -49,6 +50,7 @@ class Game {
         ball.color = '#00ffcc';
         
         level.reset();
+        particles.clear();
         this.updateUI();
     }
 
@@ -69,12 +71,12 @@ class Game {
         if (this.inputDown) this.updateAim();
 
         ball.update();
+        particles.update(); // Update particles
 
         // Screen Walls
         if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.5; }
         if (ball.x > width - ball.radius) { ball.x = width - ball.radius; ball.vx *= -0.5; }
 
-        // Update Level (This makes the walls move!)
         level.update();
 
         // Building Collisions
@@ -85,6 +87,10 @@ class Game {
                 
                 if (this.inputDown) {
                     // STICK
+                    if (!ball.isStuck) {
+                        // Impact Dust!
+                        particles.emit(ball.x, ball.y, '#ffffff', 8, 4);
+                    }
                     ball.isStuck = true;
                     ball.gripTimer = 0; 
                     ball.vx = 0; ball.vy = 0;
@@ -93,6 +99,8 @@ class Game {
                     ball.color = '#00ffcc';
                 } else {
                     ball.bounce(side);
+                    // Bounce Dust!
+                    particles.emit(ball.x, ball.y, '#aaaaaa', 5, 2);
                 }
                 break;
             }
@@ -101,9 +109,7 @@ class Game {
         // Stick to Moving Wall Logic
         if (ball.isStuck && ball.stuckObject && ball.stuckObject.vx) {
              if (ball.stuckObject.type === 'left') {
-                 if (ball.stuckSide === 'right_wall') {
-                     ball.x += ball.stuckObject.vx;
-                 }
+                 if (ball.stuckSide === 'right_wall') ball.x += ball.stuckObject.vx;
              }
              else if (ball.stuckObject.type === 'right') {
                  ball.x += ball.stuckObject.vx;
@@ -121,6 +127,8 @@ class Game {
                     GameState.currency++;
                     GameState.save();
                     this.updateCoinUI();
+                    // Gold Sparkles!
+                    particles.emit(c.x, c.y, '#FFD700', 10, 5);
                 }
             }
         }
@@ -143,7 +151,6 @@ class Game {
         let min = -Math.PI + 0.1; 
         let max = -0.1;
         
-        // STRICT 90 DEGREE ANGLES
         if (ball.stuckSide === 'left_wall') {
             min = -Math.PI / 2; 
             max = 0;
@@ -166,11 +173,13 @@ class Game {
     }
     
     updateCoinUI() {
-        // UPDATED: Use the HTML element
         uiBits.innerText = `Bits: ${GameState.currency}`;
     }
 
     gameOver() {
+        // Death Explosion!
+        particles.emit(ball.x, ball.y, ball.color, 30, 8);
+        
         this.state = 2;
         if (this.score > this.bestScore) {
             this.bestScore = this.score;
@@ -196,7 +205,9 @@ class Game {
         ctx.save();
         
         level.draw(ctx, this.cameraY, this.score);
+        particles.draw(ctx, this.cameraY); // Draw particles
 
+        // Draw Aim Line (Dashed Laser)
         if (this.state === 1 && this.inputDown && ball.isStuck) {
             ctx.beginPath();
             ctx.moveTo(ball.x, ball.y - this.cameraY);
@@ -206,14 +217,24 @@ class Game {
                 sx += svx; sy += svy;
                 ctx.lineTo(sx, sy - this.cameraY);
             }
-            ctx.strokeStyle = '#ff0055'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.strokeStyle = '#ff0055'; 
+            ctx.lineWidth = 3; 
+            ctx.setLineDash([5, 5]); // Dashed line
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
         }
 
-        ball.draw(ctx, this.cameraY);
+        // Only draw player if alive (or allow particles to show death)
+        if (this.state !== 2) {
+            ball.draw(ctx, this.cameraY);
+        }
+
         ctx.restore();
 
         if (this.state === 2) {
-            ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,width,height);
+            // Delay the Game Over screen slightly so we see the explosion?
+            // For now, just transparent overlay
+            ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0,0,width,height);
             ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '30px Courier';
             ctx.fillText("FALLEN", width/2, height/2);
         }
