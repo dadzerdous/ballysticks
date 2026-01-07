@@ -11,7 +11,7 @@ const uiStatus = document.getElementById('status');
 const uiZone = document.getElementById('zone-name');
 const uiBest = document.getElementById('best-score');
 
-// Add Coin UI
+// Coin UI
 const coinUI = document.createElement('div');
 coinUI.style.position = 'absolute';
 coinUI.style.top = '50px';
@@ -32,8 +32,8 @@ class Game {
         this.bestScore = localStorage.getItem('canyon_best') || 0;
         this.aimAngle = -Math.PI / 2;
         this.aimDir = 1;
-        this.shake = 0;
         this.inputDown = false;
+        // Removed: this.shake
     }
 
     init() {
@@ -83,7 +83,7 @@ class Game {
         if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.5; }
         if (ball.x > width - ball.radius) { ball.x = width - ball.radius; ball.vx *= -0.5; }
 
-        // Update Level (Moving walls)
+        // Update Level (This makes the walls move!)
         level.update();
 
         // Building Collisions
@@ -95,12 +95,12 @@ class Game {
                 if (this.inputDown) {
                     // STICK
                     ball.isStuck = true;
-                    ball.gripTimer = 0; // Reset grip on impact
+                    ball.gripTimer = 0; 
                     ball.vx = 0; ball.vy = 0;
                     ball.stuckObject = b;
                     ball.stuckSide = side;
                     ball.color = '#00ffcc';
-                    this.shake = 5;
+                    // Removed: this.shake = 5;
                 } else {
                     ball.bounce(side);
                 }
@@ -110,8 +110,18 @@ class Game {
 
         // Stick to Moving Wall Logic
         if (ball.isStuck && ball.stuckObject && ball.stuckObject.vx) {
-             // If the wall moves, the ball moves with it
-             ball.x += ball.stuckObject.vx;
+             // If sticking to Left Wall, the wall expands/contracts (change in Width)
+             if (ball.stuckObject.type === 'left') {
+                 // If we are on the right face of the left wall, push us with the expansion
+                 if (ball.stuckSide === 'right_wall') {
+                     ball.x += ball.stuckObject.vx;
+                 }
+             }
+             // If sticking to Right Wall, the wall shifts (change in X)
+             else if (ball.stuckObject.type === 'right') {
+                 // Move ball with the wall's X movement
+                 ball.x += ball.stuckObject.vx;
+             }
         }
 
         // Coin Collection
@@ -139,44 +149,27 @@ class Game {
         this.updateZone();
 
         if (ball.y - this.cameraY > height + 100) this.gameOver();
-        
-        if (this.shake > 0) this.shake *= 0.9;
-        if (this.shake < 0.5) this.shake = 0;
     }
 
     updateAim() {
         this.aimAngle += Config.aimSpeed * this.aimDir;
         
-        // Default (Air/Floor): 180 degree fan
         let min = -Math.PI + 0.1; 
         let max = -0.1;
         
         // STRICT 90 DEGREE ANGLES
         if (ball.stuckSide === 'left_wall') {
-            // Up (-PI/2) to Right (0)
             min = -Math.PI / 2; 
             max = 0;
         } 
         else if (ball.stuckSide === 'right_wall') {
-            // Left (-PI) to Up (-PI/2)
             min = -Math.PI;
             max = -Math.PI / 2;
         }
         
-        // Bounce logic
-        if (this.aimAngle > max) { 
-            this.aimAngle = max; 
-            this.aimDir = -1; 
-        }
-        if (this.aimAngle < min) { 
-            this.aimAngle = min; 
-            this.aimDir = 1; 
-        }
-        
-        // Safety Reset
-        if (this.aimAngle > max + 0.5 || this.aimAngle < min - 0.5) {
-            this.aimAngle = (min + max) / 2;
-        }
+        if (this.aimAngle > max) { this.aimAngle = max; this.aimDir = -1; }
+        if (this.aimAngle < min) { this.aimAngle = min; this.aimDir = 1; }
+        if (this.aimAngle > max + 0.5 || this.aimAngle < min - 0.5) this.aimAngle = (min + max) / 2;
     }
 
     updateZone() {
@@ -214,7 +207,7 @@ class Game {
         ctx.fillRect(0, 0, width, height);
 
         ctx.save();
-        if (this.shake > 0) ctx.translate((Math.random()-0.5)*this.shake, (Math.random()-0.5)*this.shake);
+        // Removed Shake Translation
         
         level.draw(ctx, this.cameraY, this.score);
 
