@@ -106,15 +106,18 @@ class Game {
             }
         }
 
-        // Stick to Moving Wall Logic
+                // FIXED: Stick to Moving Wall Logic
         if (ball.isStuck && ball.stuckObject && ball.stuckObject.vx) {
              if (ball.stuckObject.type === 'left') {
-                 if (ball.stuckSide === 'right_wall') ball.x += ball.stuckObject.vx;
+                 // Left wall changes width, so we stick to the RIGHT edge of the wall
+                 ball.x = ball.stuckObject.w + ball.radius; 
              }
              else if (ball.stuckObject.type === 'right') {
-                 ball.x += ball.stuckObject.vx;
+                 // Right wall shifts X, so we stick to the LEFT edge of the wall
+                 ball.x = ball.stuckObject.x - ball.radius;
              }
         }
+
 
         // Coin Collection
         for (let c of level.coins) {
