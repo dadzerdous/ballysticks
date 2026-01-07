@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Canyon Climber v0.4</title>
+    <title>Canyon Climber v0.5</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #111;
+            background-color: #050505;
             color: #fff;
             font-family: 'Courier New', Courier, monospace;
             touch-action: none; 
@@ -24,6 +24,15 @@
         }
         h1 { margin: 0; font-size: 24px; text-shadow: 2px 2px 0px #000; color: #fff;}
         p { margin: 5px 0; font-size: 14px; color: #ddd; text-shadow: 1px 1px 0px #000;}
+        #zone-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+            pointer-events: none;
+        }
+        .best-score { font-size: 12px; color: #aaa; }
+        .zone-name { font-size: 18px; font-weight: bold; color: #00ffcc; text-transform: uppercase; text-shadow: 0 0 10px rgba(0,255,204,0.5); }
         #version {
             position: absolute;
             bottom: 10px;
@@ -38,9 +47,15 @@
 
 <div id="ui">
     <h1 id="score">Height: 0</h1>
-    <p id="status-text">Hold to Aim, Release to Jump</p>
+    <p id="status-text">Hold to Aim</p>
 </div>
-<div id="version">v0.4</div>
+
+<div id="zone-indicator">
+    <div class="zone-name" id="zone-text">THE CITY</div>
+    <div class="best-score" id="best-score">Best: 0</div>
+</div>
+
+<div id="version">v0.5</div>
 
 <canvas id="gameCanvas"></canvas>
 
@@ -49,13 +64,14 @@
     const ctx = canvas.getContext('2d');
 
     // --- Configuration ---
-    const VERSION = "0.4";
+    const VERSION = "0.5";
     let width, height;
     
-    // Physics Constants
+    // Physics
     const gravity = 0.45;
     const friction = 0.98;
-    const jumpPower = 19; 
+    const jumpPower = 20; 
+    const wallSlideSpeed = 1.5; // How fast you slide down while stuck
     
     // --- Game States ---
     const STATE_LOBBY = 0;
@@ -66,12 +82,15 @@
     // --- World State ---
     let cameraY = 0;
     let score = 0;
+    let bestScore = localStorage.getItem('canyon_best') || 0;
     let buildings = [];
     let buildingSpawnerY = 0; 
+    let shakeStrength = 0; // Screen shake value
     
     // --- Aiming ---
     let aimAngle = -Math.PI / 2; 
     let aimDirection = 1; 
+    const aimSpeed = 0.05; // Slowed down from 0.08
 
     // --- Input ---
     const input = { isDown: false };
@@ -85,6 +104,15 @@
         color: '#00ffcc'
     };
 
+    // --- Zones ---
+    const ZONES = [
+        { h: 0, name: "The City", color: [20, 20, 20] },     // Dark Grey
+        { h: 50, name: "Skyline", color: [20, 20, 50] },     // Dark Blue
+        { h: 150, name: "Atmosphere", color: [40, 20, 60] }, // Purple
+        { h: 300, name: "Stratosphere", color: [60, 10, 30] }, // Redish
+        { h: 500, name: "The Void", color: [0, 0, 0] }       // Pitch Black
+    ];
+
     // --- Initialization ---
     function resize() {
         width = canvas.width = window.innerWidth;
@@ -97,72 +125,82 @@
         cameraY = 0;
         score = 0;
         
-        // Reset Ball to bottom center
+        // Reset Ball
         ball.radius = 12;
         ball.x = width / 2;
         ball.y = height - 50;
         ball.vx = 0;
         ball.vy = 0;
         ball.isStuck = true;
-        ball.stuckObject = null; // Ground
+        ball.stuckObject = null;
         ball.color = '#00ffcc';
 
         // Reset Level
         buildings = [];
         buildingSpawnerY = height; 
         
-        // Create the floor
+        // Floor
         buildings.push({
-            x: -50, y: height - 10, w: width + 100, h: 100, color: '#333'
+            x: -50, y: height - 10, w: width + 100, h: 200, color: '#333'
         });
 
-        // Generate initial canyon
         generateBuildings(height - 100);
-        
         updateUI();
     }
 
-    // --- Building Generation (The Canyon) ---
+    // --- New Generation Logic: "The Path" ---
     function generateBuildings(startY) {
-        // We generate in pairs (Left Wall, Right Wall) with a gap
+        // While the spawner is lower than the area above camera...
         while (buildingSpawnerY > startY - height * 2) { 
-            buildingSpawnerY -= (120 + Math.random() * 60); // Vertical Gap
             
-            const wallHeight = 40 + Math.random() * 80;
-            const gapWidth = 150 + Math.random() * 100; // Size of the safe space in middle
+            // 1. Determine "Gap" characteristics
+            // The path drifts left and right
+            const centerDrift = Math.sin(buildingSpawnerY * 0.002) * (width * 0.3);
+            const centerX = (width / 2) + centerDrift; 
             
-            // Randomize how far left/right the gap is shifted
-            const centerShift = (Math.random() - 0.5) * (width * 0.4); 
-            const centerX = width / 2 + centerShift;
+            // The path width varies slightly
+            const gapWidth = 140 + Math.random() * 60; 
+            
+            // Vertical distance between blocks
+            const verticalGap = 40 + Math.random() * 40; 
+            
+            // Height of the new wall segment (Taller now!)
+            const blockHeight = 150 + Math.random() * 200; 
 
+            buildingSpawnerY -= verticalGap; // Move up
+
+            // 2. Calculate Walls based on Gap
             const leftWallW = centerX - (gapWidth / 2);
             const rightWallX = centerX + (gapWidth / 2);
             const rightWallW = width - rightWallX;
 
-            // Left Building
-            if (leftWallW > 20) {
+            // 3. Add Left Building
+            if (leftWallW > 0) {
                 buildings.push({
                     x: 0, 
-                    y: buildingSpawnerY, 
+                    y: buildingSpawnerY - blockHeight, // Draw from top-left 
                     w: leftWallW, 
-                    h: wallHeight, 
-                    color: '#555'
+                    h: blockHeight,
+                    type: 'normal'
                 });
             }
 
-            // Right Building
-            if (rightWallW > 20) {
+            // 4. Add Right Building
+            if (rightWallW > 0) {
                 buildings.push({
                     x: rightWallX, 
-                    y: buildingSpawnerY, 
+                    y: buildingSpawnerY - blockHeight, 
                     w: rightWallW, 
-                    h: wallHeight, 
-                    color: '#555'
+                    h: blockHeight,
+                    type: 'normal'
                 });
             }
+            
+            // Move spawner to top of this block for next iteration
+            buildingSpawnerY -= blockHeight;
         }
         
-        // Cleanup old buildings
+        // Cleanup
         buildings = buildings.filter(b => b.y - cameraY < height + 500);
     }
 
@@ -181,7 +219,6 @@
     
     function handleEnd() {
         input.isDown = false;
-        
         if (currentState === STATE_PLAYING && ball.isStuck) {
             launchBall();
         }
@@ -197,14 +234,13 @@
     function launchBall() {
         ball.isStuck = false;
         ball.stuckObject = null;
-        ball.color = '#ffeb3b'; // Yellow
+        ball.color = '#ffeb3b'; 
         
         ball.vx = Math.cos(aimAngle) * jumpPower;
         ball.vy = Math.sin(aimAngle) * jumpPower;
     }
 
     function checkCollision(rect) {
-        // Closest point on rect to circle center
         let testX = ball.x;
         let testY = ball.y;
 
@@ -218,16 +254,11 @@
         let distY = ball.y - testY;
         let distance = Math.sqrt((distX*distX) + (distY*distY));
 
-        if (distance <= ball.radius) {
-            return { hit: true, testX, testY };
-        }
-        return { hit: false };
+        return { hit: distance <= ball.radius };
     }
 
-    // Resolve overlap so ball is never "inside" a building
     function resolveOverlap(rect) {
-        // Determine which side is closest
-        // Distance to edges
+        // Find nearest edge to push out to
         const distLeft = Math.abs(ball.x - rect.x);
         const distRight = Math.abs(ball.x - (rect.x + rect.w));
         const distTop = Math.abs(ball.y - rect.y);
@@ -244,22 +275,19 @@
     function update() {
         if (currentState !== STATE_PLAYING) return;
 
-        // 1. Aim Oscillation
+        // 1. Aim Oscillation (Slower now)
         if (input.isDown) {
-            const speed = 0.08;
-            aimAngle += speed * aimDirection;
-            
-            // Limit angle to upper arc (-10deg to -170deg)
+            aimAngle += aimSpeed * aimDirection;
             if (aimAngle > -0.2) { aimAngle = -0.2; aimDirection = -1; }
             if (aimAngle < -Math.PI + 0.2) { aimAngle = -Math.PI + 0.2; aimDirection = 1; }
         }
 
         // 2. Physics
         if (!ball.isStuck) {
+            // Air Physics
             ball.vy += gravity;
             ball.vx *= friction;
             ball.vy *= friction;
-            
             ball.x += ball.vx;
             ball.y += ball.vy;
 
@@ -272,14 +300,31 @@
                 for (let b of buildings) {
                     let col = checkCollision(b);
                     if (col.hit) {
-                        resolveOverlap(b); // Push out immediately
+                        resolveOverlap(b); 
                         ball.isStuck = true;
                         ball.vx = 0;
                         ball.vy = 0;
                         ball.stuckObject = b;
                         ball.color = '#00ffcc';
+                        
+                        // Screen Shake Effect!
+                        shakeStrength = 5;
                         break;
                     }
+                }
+            }
+        } else {
+            // Wall Slide Logic
+            // If stuck, slowly slide down
+            ball.y += wallSlideSpeed;
+            
+            // Check if we slid off the bottom of the block
+            if (ball.stuckObject) {
+                if (ball.y > ball.stuckObject.y + ball.stuckObject.h + ball.radius) {
+                    // We fell off!
+                    ball.isStuck = false;
+                    ball.stuckObject = null;
+                    ball.color = '#ffeb3b';
                 }
             }
         }
@@ -292,52 +337,114 @@
         
         generateBuildings(cameraY);
 
-        // Score
+        // Score Calculation
         let currentHeight = Math.floor(Math.abs(ball.y - (height - 50)) / 10);
         if (currentHeight > score) score = currentHeight;
+        
+        // Update Zone Text
+        updateZoneUI();
 
         // Death
         if (ball.y - cameraY > height + 100) {
-            currentState = STATE_GAMEOVER;
-            updateUI();
+            handleDeath();
         }
+
+        // Decay Shake
+        if (shakeStrength > 0) shakeStrength *= 0.9;
+        if (shakeStrength < 0.5) shakeStrength = 0;
+    }
+
+    function handleDeath() {
+        currentState = STATE_GAMEOVER;
+        if (score > bestScore) {
+            bestScore = score;
+            localStorage.setItem('canyon_best', bestScore);
+        }
+        updateUI();
+    }
+
+    function updateZoneUI() {
+        // Find current zone
+        let activeZone = ZONES[0];
+        for(let z of ZONES) {
+            if (score >= z.h) activeZone = z;
+        }
+        document.getElementById('zone-text').innerText = activeZone.name;
+        document.getElementById('zone-text').style.textShadow = `0 0 10px rgb(${activeZone.color.join(',')})`;
     }
 
     function updateUI() {
         const status = document.getElementById('status-text');
         const scoreEl = document.getElementById('score');
+        const bestEl = document.getElementById('best-score');
         
+        bestEl.innerText = `Best: ${bestScore}`;
+
         if (currentState === STATE_LOBBY) {
-            status.innerText = "HOLD screen to Aim & Start";
+            status.innerText = "HOLD to Aim & Start";
             status.style.color = "#00ffcc";
         } else if (currentState === STATE_PLAYING) {
             status.innerText = "";
         } else if (currentState === STATE_GAMEOVER) {
-            status.innerText = "Tap anywhere to Restart";
+            status.innerText = "Tap to Restart";
             status.style.color = "#ff3333";
         }
         scoreEl.innerText = `Height: ${score}`;
     }
 
-    // --- Rendering ---
+    // --- Visuals & Rendering ---
+    
+    function getBackgroundColor() {
+        // Interpolate background based on score
+        // Simple clamp for prototype
+        let factor = Math.min(score / 500, 1); // 0 to 1
+        // Start: #050505 (5,5,5)
+        // End: #2a0a1a (42, 10, 26) -- rough deep space color
+        // Actually let's use the ZONE colors
+        
+        let activeZone = ZONES[0];
+        for(let z of ZONES) {
+            if (score >= z.h) activeZone = z;
+        }
+        return `rgb(${activeZone.color[0]}, ${activeZone.color[1]}, ${activeZone.color[2]})`;
+    }
+
     function draw() {
         // Background
-        ctx.fillStyle = '#111';
+        ctx.fillStyle = getBackgroundColor();
         ctx.fillRect(0, 0, width, height);
 
         ctx.save();
+        
+        // Apply Shake
+        if (shakeStrength > 0) {
+            let dx = (Math.random() - 0.5) * shakeStrength;
+            let dy = (Math.random() - 0.5) * shakeStrength;
+            ctx.translate(dx, dy);
+        }
+
         ctx.translate(0, -cameraY);
 
         // Draw Buildings
-        ctx.fillStyle = '#444';
-        ctx.strokeStyle = '#666';
+        // Opacity changes with height
+        let buildingOpacity = Math.max(0.3, 1 - (score / 800)); 
+        ctx.fillStyle = `rgba(100, 100, 100, ${buildingOpacity})`;
+        ctx.strokeStyle = `rgba(200, 200, 200, ${buildingOpacity})`;
         ctx.lineWidth = 2;
+        
         for (let b of buildings) {
             ctx.fillRect(b.x, b.y, b.w, b.h);
             ctx.strokeRect(b.x, b.y, b.w, b.h);
+            
+            // Add internal detail lines to make them look like skyscrapers
+            ctx.beginPath();
+            ctx.moveTo(b.x + b.w/2, b.y);
+            ctx.lineTo(b.x + b.w/2, b.y + b.h);
+            ctx.strokeStyle = `rgba(0,0,0,0.2)`;
+            ctx.stroke();
         }
 
-        // Draw Predictive Trajectory (The Curve)
+        // Draw Predictive Trajectory
         if (input.isDown && ball.isStuck && currentState === STATE_PLAYING) {
             drawTrajectory();
         }
@@ -353,20 +460,22 @@
 
         ctx.restore();
 
-        // Game Over Text
+        // Game Over Overlay
         if (currentState === STATE_GAMEOVER) {
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
             ctx.fillRect(0, 0, width, height);
             
             ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
             ctx.font = '30px Courier';
             ctx.fillText("FALLEN", width/2, height/2 - 20);
+            ctx.font = '20px Courier';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(`Score: ${score}`, width/2, height/2 + 20);
         }
     }
 
     function drawTrajectory() {
-        // Simulate physics to draw a curve
         ctx.beginPath();
         ctx.moveTo(ball.x, ball.y);
 
@@ -375,7 +484,6 @@
         let simVX = Math.cos(aimAngle) * jumpPower;
         let simVY = Math.sin(aimAngle) * jumpPower;
 
-        // Simulate 15 frames ahead
         for(let i=0; i<15; i++) {
             simVY += gravity;
             simVX *= friction;
