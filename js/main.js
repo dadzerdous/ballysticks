@@ -143,15 +143,43 @@ class Game {
         if (this.shake < 0.5) this.shake = 0;
     }
 
-    updateAim() {
+updateAim() {
         this.aimAngle += Config.aimSpeed * this.aimDir;
-        let min = -Math.PI + 0.2, max = -0.2;
-        if (ball.stuckSide === 'left_wall') min = -Math.PI/2 + 0.2; 
-        else if (ball.stuckSide === 'right_wall') max = -Math.PI/2 - 0.2; 
         
-        if (this.aimAngle > max) { this.aimAngle = max; this.aimDir = -1; }
-        if (this.aimAngle < min) { this.aimAngle = min; this.aimDir = 1; }
-        if (this.aimAngle > max + 0.5 || this.aimAngle < min - 0.5) this.aimAngle = (min+max)/2;
+        // Default Range (Air/Floor/Ceiling): Almost full circle (-170 to -10 degrees)
+        let min = -Math.PI + 0.1; 
+        let max = -0.1;
+        
+        // WIDENED RANGES FOR WALLS
+        if (ball.stuckSide === 'left_wall') {
+            // Stuck on Left Wall: Allow shooting Right, Up, and slightly Back-Left
+            // Range: -2.8 (Up-Left) to 0.5 (Down-Right)
+            min = -2.8; 
+            max = 0.5;
+        } 
+        else if (ball.stuckSide === 'right_wall') {
+            // Stuck on Right Wall: Allow shooting Left, Up, and slightly Back-Right
+            // Range: -3.6 (Down-Left) to -0.3 (Up-Right)
+            // Note: In radians, -PI is Left. We need to handle the wrap-around logic slightly differently
+            // But for simple clamping, we keep it within the negative PI space.
+            min = -Math.PI - 0.5; // Down-Left
+            max = -0.3;           // Up-Right
+        }
+        
+        // Standard Ping-Pong Logic
+        if (this.aimAngle > max) { 
+            this.aimAngle = max; 
+            this.aimDir = -1; 
+        }
+        if (this.aimAngle < min) { 
+            this.aimAngle = min; 
+            this.aimDir = 1; 
+        }
+        
+        // Safety Reset if angle gets stuck outside valid range
+        if (this.aimAngle > max + 1.0 || this.aimAngle < min - 1.0) {
+            this.aimAngle = (min + max) / 2;
+        }
     }
 
     updateZone() {
