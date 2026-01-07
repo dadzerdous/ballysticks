@@ -1,4 +1,4 @@
-import { Config, GameState, Utils } from './config.js'; // Import GameState
+import { Config, GameState, Utils } from './config.js'; 
 import { Physics } from './physics.js';
 import { LevelMaker } from './level.js';
 import { Ball } from './ball.js';
@@ -87,8 +87,6 @@ class Game {
         level.update();
 
         // Building Collisions
-// ... inside update() ...
-        // Building Collisions
         for (let b of level.buildings) {
             let col = Physics.checkCollision(ball, b);
             if (col.hit) {
@@ -97,7 +95,7 @@ class Game {
                 if (this.inputDown) {
                     // STICK
                     ball.isStuck = true;
-                    ball.gripTimer = 0; // <--- ADD THIS LINE (Resets grip on impact)
+                    ball.gripTimer = 0; // Reset grip on impact
                     ball.vx = 0; ball.vy = 0;
                     ball.stuckObject = b;
                     ball.stuckSide = side;
@@ -108,7 +106,6 @@ class Game {
                 }
                 break;
             }
-        }
         }
 
         // Stick to Moving Wall Logic
@@ -128,7 +125,6 @@ class Game {
                     GameState.currency++;
                     GameState.save();
                     this.updateCoinUI();
-                    // Optional: Play sound or particle here
                 }
             }
         }
@@ -148,7 +144,7 @@ class Game {
         if (this.shake < 0.5) this.shake = 0;
     }
 
-updateAim() {
+    updateAim() {
         this.aimAngle += Config.aimSpeed * this.aimDir;
         
         // Default (Air/Floor): 180 degree fan
