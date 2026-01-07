@@ -63,32 +63,35 @@ class Game {
     }
 
     setupShop() {
-        const shopMenu = document.getElementById('shop-menu');
-        const openBtn = document.getElementById('open-shop-btn');
-        const closeBtn = document.getElementById('close-shop');
-        const colorList = document.getElementById('color-list');
+    const shopMenu = document.getElementById('shop-menu');
+    const openBtn = document.getElementById('open-shop-btn');
+    const closeBtn = document.getElementById('close-shop');
+    const colorList = document.getElementById('color-list');
 
-        const availableColors = [
-            { hex: '#00ffcc', price: 0 },
-            { hex: '#ff0055', price: 50 },
-            { hex: '#ffeb3b', price: 100 },
-            { hex: '#bf00ff', price: 200 },
-            { hex: '#ffffff', price: 500 }
-        ];
+    const availableColors = [
+        { hex: '#00ffcc', price: 0 },
+        { hex: '#ff0055', price: 50 },
+        { hex: '#ffeb3b', price: 100 },
+        { hex: '#bf00ff', price: 200 },
+        { hex: '#ffffff', price: 500 }
+    ];
 
-        openBtn.onclick = (e) => {
-            e.stopPropagation(); // Stop click from starting game
-            this.inputDown = false;
-            shopMenu.style.display = 'block';
-            document.getElementById('shop-bits').innerText = `Bits: ${GameState.currency}`;
-            this.renderColors(availableColors, colorList);
-        };
+    openBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // This prevents the click from starting the game
+        this.inputDown = false;
+        shopMenu.style.display = 'block';
+        document.getElementById('shop-bits').innerText = `Bits: ${GameState.currency}`;
+        this.renderColors(availableColors, colorList);
+    };
 
-        closeBtn.onclick = (e) => {
-            e.stopPropagation();
-            shopMenu.style.display = 'none';
-        };
-    }
+    closeBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        shopMenu.style.display = 'none';
+    };
+}
+
 
     renderColors(colors, container) {
         container.innerHTML = '';
@@ -132,22 +135,26 @@ class Game {
     }
 
     handleInput(isDown) {
-        if (isDown) {
-            // Block game start if clicking inside shop
-            if (document.getElementById('shop-menu').style.display === 'block') return;
-            
-            if (this.state === 2) { this.enterLobby(); return; }
-            if (this.state === 0) { 
-                this.state = 1; 
-                document.getElementById('open-shop-btn').style.display = 'none';
-                this.updateUI(); 
-            }
-            this.inputDown = true;
-        } else {
-            this.inputDown = false;
-            if (this.state === 1 && ball.isStuck) ball.launch(this.aimAngle);
-        }
+    // NEW: If shop is open, ignore all game inputs
+    if (document.getElementById('shop-menu').style.display === 'block') {
+        this.inputDown = false;
+        return; 
     }
+
+    if (isDown) {
+        if (this.state === 2) { this.enterLobby(); return; }
+        if (this.state === 0) { 
+            this.state = 1; 
+            document.getElementById('open-shop-btn').style.display = 'none';
+            this.updateUI(); 
+        }
+        this.inputDown = true;
+    } else {
+        this.inputDown = false;
+        if (this.state === 1 && ball.isStuck) ball.launch(this.aimAngle);
+    }
+}
+
 
     update() {
         if (this.state !== 1) return;
