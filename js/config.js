@@ -3,8 +3,13 @@ export const Config = {
     friction: 0.99,
     wallBounce: 0.7,
     jumpPower: 21,
-    wallSlideSpeed: 0.3,  // CHANGED: Slowed way down (was 1.5)
-    aimSpeed: 0.04,       // CHANGED: Slightly slower aim for precision
+    aimSpeed: 0.04,
+    
+    // NEW GRIP SETTINGS
+    gripDuration: 90,     // Frames (approx 1.5 seconds at 60fps)
+    slipAcceleration: 0.1, // How fast the slipping speeds up
+    maxSlipSpeed: 8.0,     // Terminal velocity when slipping
+    
     zones: [
         { h: 0, name: "The City", color: [20, 20, 20] },
         { h: 50, name: "Skyline", color: [20, 20, 50] },
