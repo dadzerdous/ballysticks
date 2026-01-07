@@ -87,13 +87,17 @@ class Game {
         level.update();
 
         // Building Collisions
+// ... inside update() ...
+        // Building Collisions
         for (let b of level.buildings) {
             let col = Physics.checkCollision(ball, b);
             if (col.hit) {
                 let side = Physics.resolve(ball, b);
                 
                 if (this.inputDown) {
+                    // STICK
                     ball.isStuck = true;
+                    ball.gripTimer = 0; // <--- ADD THIS LINE (Resets grip on impact)
                     ball.vx = 0; ball.vy = 0;
                     ball.stuckObject = b;
                     ball.stuckSide = side;
@@ -104,6 +108,7 @@ class Game {
                 }
                 break;
             }
+        }
         }
 
         // Stick to Moving Wall Logic
@@ -146,27 +151,23 @@ class Game {
 updateAim() {
         this.aimAngle += Config.aimSpeed * this.aimDir;
         
-        // Default Range (Air/Floor/Ceiling): Almost full circle (-170 to -10 degrees)
+        // Default (Air/Floor): 180 degree fan
         let min = -Math.PI + 0.1; 
         let max = -0.1;
         
-        // WIDENED RANGES FOR WALLS
+        // STRICT 90 DEGREE ANGLES
         if (ball.stuckSide === 'left_wall') {
-            // Stuck on Left Wall: Allow shooting Right, Up, and slightly Back-Left
-            // Range: -2.8 (Up-Left) to 0.5 (Down-Right)
-            min = -2.8; 
-            max = 0.5;
+            // Up (-PI/2) to Right (0)
+            min = -Math.PI / 2; 
+            max = 0;
         } 
         else if (ball.stuckSide === 'right_wall') {
-            // Stuck on Right Wall: Allow shooting Left, Up, and slightly Back-Right
-            // Range: -3.6 (Down-Left) to -0.3 (Up-Right)
-            // Note: In radians, -PI is Left. We need to handle the wrap-around logic slightly differently
-            // But for simple clamping, we keep it within the negative PI space.
-            min = -Math.PI - 0.5; // Down-Left
-            max = -0.3;           // Up-Right
+            // Left (-PI) to Up (-PI/2)
+            min = -Math.PI;
+            max = -Math.PI / 2;
         }
         
-        // Standard Ping-Pong Logic
+        // Bounce logic
         if (this.aimAngle > max) { 
             this.aimAngle = max; 
             this.aimDir = -1; 
@@ -176,8 +177,8 @@ updateAim() {
             this.aimDir = 1; 
         }
         
-        // Safety Reset if angle gets stuck outside valid range
-        if (this.aimAngle > max + 1.0 || this.aimAngle < min - 1.0) {
+        // Safety Reset
+        if (this.aimAngle > max + 0.5 || this.aimAngle < min - 0.5) {
             this.aimAngle = (min + max) / 2;
         }
     }
