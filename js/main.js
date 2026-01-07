@@ -10,16 +10,8 @@ const uiScore = document.getElementById('score');
 const uiStatus = document.getElementById('status');
 const uiZone = document.getElementById('zone-name');
 const uiBest = document.getElementById('best-score');
-
-// Coin UI
-const coinUI = document.createElement('div');
-coinUI.style.position = 'absolute';
-coinUI.style.top = '50px';
-coinUI.style.left = '20px';
-coinUI.style.color = '#FFD700';
-coinUI.style.fontFamily = 'Courier New';
-coinUI.style.fontWeight = 'bold';
-document.body.appendChild(coinUI);
+// NEW: Grab the element from HTML instead of creating it
+const uiBits = document.getElementById('bits');
 
 let width, height;
 let ball, level;
@@ -33,7 +25,6 @@ class Game {
         this.aimAngle = -Math.PI / 2;
         this.aimDir = 1;
         this.inputDown = false;
-        // Removed: this.shake
     }
 
     init() {
@@ -100,7 +91,6 @@ class Game {
                     ball.stuckObject = b;
                     ball.stuckSide = side;
                     ball.color = '#00ffcc';
-                    // Removed: this.shake = 5;
                 } else {
                     ball.bounce(side);
                 }
@@ -110,16 +100,12 @@ class Game {
 
         // Stick to Moving Wall Logic
         if (ball.isStuck && ball.stuckObject && ball.stuckObject.vx) {
-             // If sticking to Left Wall, the wall expands/contracts (change in Width)
              if (ball.stuckObject.type === 'left') {
-                 // If we are on the right face of the left wall, push us with the expansion
                  if (ball.stuckSide === 'right_wall') {
                      ball.x += ball.stuckObject.vx;
                  }
              }
-             // If sticking to Right Wall, the wall shifts (change in X)
              else if (ball.stuckObject.type === 'right') {
-                 // Move ball with the wall's X movement
                  ball.x += ball.stuckObject.vx;
              }
         }
@@ -180,7 +166,8 @@ class Game {
     }
     
     updateCoinUI() {
-        coinUI.innerText = `Bits: ${GameState.currency}`;
+        // UPDATED: Use the HTML element
+        uiBits.innerText = `Bits: ${GameState.currency}`;
     }
 
     gameOver() {
@@ -207,7 +194,6 @@ class Game {
         ctx.fillRect(0, 0, width, height);
 
         ctx.save();
-        // Removed Shake Translation
         
         level.draw(ctx, this.cameraY, this.score);
 
