@@ -28,7 +28,13 @@
         <button id="close-shop" style="background:#444; color:white; border:none; padding:12px 24px; cursor:pointer; font-family:monospace; font-weight:bold; letter-spacing: 1px;">CLOSE</button>
     </div>
 
-    <button id="open-shop-btn" style="position:absolute; bottom:20px; left:20px; background:#00ffcc; border:none; padding:12px 20px; font-family:monospace; font-weight:bold; cursor:pointer; z-index:10; box-shadow: 2px 2px 0px #000;">SHOP</button>
+    <button id="open-shop-btn" 
+        onmousedown="event.stopPropagation()" 
+        ontouchstart="event.stopPropagation()"
+        style="position:absolute; bottom:20px; left:20px; background:#00ffcc; border:none; padding:12px 20px; font-family:monospace; font-weight:bold; cursor:pointer; z-index:10; box-shadow: 2px 2px 0px #000;">
+    SHOP
+</button>
+
     
     <div id="version">v0.14 GitHub</div>
     
