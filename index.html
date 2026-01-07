@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Canyon Climber v0.5</title>
+    <title>Canyon Climber v0.6</title>
     <style>
         body {
             margin: 0;
@@ -55,7 +55,7 @@
     <div class="best-score" id="best-score">Best: 0</div>
 </div>
 
-<div id="version">v0.5</div>
+<div id="version">v0.6</div>
 
 <canvas id="gameCanvas"></canvas>
 
@@ -64,14 +64,14 @@
     const ctx = canvas.getContext('2d');
 
     // --- Configuration ---
-    const VERSION = "0.5";
+    const VERSION = "0.6";
     let width, height;
     
     // Physics
     const gravity = 0.45;
     const friction = 0.98;
     const jumpPower = 20; 
-    const wallSlideSpeed = 1.5; // How fast you slide down while stuck
+    const wallSlideSpeed = 1.5; 
     
     // --- Game States ---
     const STATE_LOBBY = 0;
@@ -85,12 +85,12 @@
     let bestScore = localStorage.getItem('canyon_best') || 0;
     let buildings = [];
     let buildingSpawnerY = 0; 
-    let shakeStrength = 0; // Screen shake value
+    let shakeStrength = 0; 
     
     // --- Aiming ---
     let aimAngle = -Math.PI / 2; 
     let aimDirection = 1; 
-    const aimSpeed = 0.05; // Slowed down from 0.08
+    const aimSpeed = 0.05;
 
     // --- Input ---
     const input = { isDown: false };
@@ -101,16 +101,17 @@
         radius: 12,
         isStuck: true,
         stuckObject: null, 
+        stuckSide: null, // 'left_wall' or 'right_wall' or 'floor'
         color: '#00ffcc'
     };
 
     // --- Zones ---
     const ZONES = [
-        { h: 0, name: "The City", color: [20, 20, 20] },     // Dark Grey
-        { h: 50, name: "Skyline", color: [20, 20, 50] },     // Dark Blue
-        { h: 150, name: "Atmosphere", color: [40, 20, 60] }, // Purple
-        { h: 300, name: "Stratosphere", color: [60, 10, 30] }, // Redish
-        { h: 500, name: "The Void", color: [0, 0, 0] }       // Pitch Black
+        { h: 0, name: "The City", color: [20, 20, 20] },     
+        { h: 50, name: "Skyline", color: [20, 20, 50] },     
+        { h: 150, name: "Atmosphere", color: [40, 20, 60] }, 
+        { h: 300, name: "Stratosphere", color: [60, 10, 30] }, 
+        { h: 500, name: "The Void", color: [0, 0, 0] }       
     ];
 
     // --- Initialization ---
@@ -133,6 +134,7 @@
         ball.vy = 0;
         ball.isStuck = true;
         ball.stuckObject = null;
+        ball.stuckSide = 'floor'; // Start on floor
         ball.color = '#00ffcc';
 
         // Reset Level
@@ -148,28 +150,30 @@
         updateUI();
     }
 
-    // --- New Generation Logic: "The Path" ---
+    // --- Generation Logic ---
     function generateBuildings(startY) {
-        // While the spawner is lower than the area above camera...
         while (buildingSpawnerY > startY - height * 2) { 
             
-            // 1. Determine "Gap" characteristics
-            // The path drifts left and right
-            const centerDrift = Math.sin(buildingSpawnerY * 0.002) * (width * 0.3);
-            const centerX = (width / 2) + centerDrift; 
+            // 1. Determine "Gap"
+            let centerX;
             
-            // The path width varies slightly
+            // GUARANTEED SAFE START: 
+            // If we are near the bottom (first few blocks), force center path
+            if (buildingSpawnerY > height - 600) {
+                centerX = width / 2; 
+            } else {
+                // Otherwise, drift naturally
+                const centerDrift = Math.sin(buildingSpawnerY * 0.002) * (width * 0.3);
+                centerX = (width / 2) + centerDrift; 
+            }
+            
             const gapWidth = 140 + Math.random() * 60; 
-            
-            // Vertical distance between blocks
             const verticalGap = 40 + Math.random() * 40; 
-            
-            // Height of the new wall segment (Taller now!)
             const blockHeight = 150 + Math.random() * 200; 
 
-            buildingSpawnerY -= verticalGap; // Move up
+            buildingSpawnerY -= verticalGap; 
 
-            // 2. Calculate Walls based on Gap
+            // 2. Calculate Walls
             const leftWallW = centerX - (gapWidth / 2);
             const rightWallX = centerX + (gapWidth / 2);
             const rightWallW = width - rightWallX;
@@ -178,7 +182,7 @@
             if (leftWallW > 0) {
                 buildings.push({
                     x: 0, 
-                    y: buildingSpawnerY - blockHeight, // Draw from top-left 
+                    y: buildingSpawnerY - blockHeight, 
                     w: leftWallW, 
                     h: blockHeight,
                     type: 'normal'
@@ -196,11 +200,9 @@
                 });
             }
             
-            // Move spawner to top of this block for next iteration
             buildingSpawnerY -= blockHeight;
         }
         
-        // Cleanup
         buildings = buildings.filter(b => b.y - cameraY < height + 500);
     }
 
@@ -234,6 +236,7 @@
     function launchBall() {
         ball.isStuck = false;
         ball.stuckObject = null;
+        ball.stuckSide = null;
         ball.color = '#ffeb3b'; 
         
         ball.vx = Math.cos(aimAngle) * jumpPower;
@@ -258,7 +261,6 @@
     }
 
     function resolveOverlap(rect) {
-        // Find nearest edge to push out to
         const distLeft = Math.abs(ball.x - rect.x);
         const distRight = Math.abs(ball.x - (rect.x + rect.w));
         const distTop = Math.abs(ball.y - rect.y);
@@ -266,20 +268,62 @@
         
         const minDist = Math.min(distLeft, distRight, distTop, distBottom);
 
-        if (minDist === distTop) ball.y = rect.y - ball.radius;
-        else if (minDist === distBottom) ball.y = rect.y + rect.h + ball.radius;
-        else if (minDist === distLeft) ball.x = rect.x - ball.radius;
-        else if (minDist === distRight) ball.x = rect.x + rect.w + ball.radius;
+        if (minDist === distTop) {
+            ball.y = rect.y - ball.radius;
+            ball.stuckSide = 'floor';
+        }
+        else if (minDist === distBottom) {
+             ball.y = rect.y + rect.h + ball.radius;
+             ball.stuckSide = 'ceiling';
+        }
+        else if (minDist === distLeft) {
+            ball.x = rect.x - ball.radius;
+            ball.stuckSide = 'right_wall'; // Ball is on the Right of the block (Stuck to a Left Wall)
+        }
+        else if (minDist === distRight) {
+            ball.x = rect.x + rect.w + ball.radius;
+            ball.stuckSide = 'left_wall'; // Ball is on the Left of the block (Stuck to a Right Wall)
+        }
     }
 
     function update() {
         if (currentState !== STATE_PLAYING) return;
 
-        // 1. Aim Oscillation (Slower now)
+        // 1. SMART AIM OSCILLATION
         if (input.isDown) {
             aimAngle += aimSpeed * aimDirection;
-            if (aimAngle > -0.2) { aimAngle = -0.2; aimDirection = -1; }
-            if (aimAngle < -Math.PI + 0.2) { aimAngle = -Math.PI + 0.2; aimDirection = 1; }
+            
+            let minAngle, maxAngle;
+
+            if (ball.stuckSide === 'left_wall') {
+                // We are on a wall to our Left. We must shoot Right.
+                // Angles: -PI/2 (Up) to 0 (Right)
+                minAngle = -Math.PI / 2 + 0.2;
+                maxAngle = -0.2;
+            } else if (ball.stuckSide === 'right_wall') {
+                 // We are on a wall to our Right. We must shoot Left.
+                 // Angles: -PI (Left) to -PI/2 (Up)
+                 minAngle = -Math.PI + 0.2;
+                 maxAngle = -Math.PI / 2 - 0.2;
+            } else {
+                // Floor or Ceiling or Air - Full Range
+                minAngle = -Math.PI + 0.2;
+                maxAngle = -0.2;
+            }
+
+            // Clamp Logic
+            if (aimAngle > maxAngle) { 
+                aimAngle = maxAngle; 
+                aimDirection = -1; 
+            }
+            if (aimAngle < minAngle) { 
+                aimAngle = minAngle; 
+                aimDirection = 1; 
+            }
+            // If angle is wildly out of bounds (e.g. sticking to new wall), reset it to safe middle
+            if (aimAngle > maxAngle + 0.5 || aimAngle < minAngle - 0.5) {
+                aimAngle = (minAngle + maxAngle) / 2;
+            }
         }
 
         // 2. Physics
@@ -306,8 +350,6 @@
                         ball.vy = 0;
                         ball.stuckObject = b;
                         ball.color = '#00ffcc';
-                        
-                        // Screen Shake Effect!
                         shakeStrength = 5;
                         break;
                     }
@@ -315,15 +357,16 @@
             }
         } else {
             // Wall Slide Logic
-            // If stuck, slowly slide down
-            ball.y += wallSlideSpeed;
+            if (ball.stuckSide !== 'floor') {
+                ball.y += wallSlideSpeed;
+            }
             
-            // Check if we slid off the bottom of the block
+            // Check if we slid off
             if (ball.stuckObject) {
                 if (ball.y > ball.stuckObject.y + ball.stuckObject.h + ball.radius) {
-                    // We fell off!
                     ball.isStuck = false;
                     ball.stuckObject = null;
+                    ball.stuckSide = null;
                     ball.color = '#ffeb3b';
                 }
             }
@@ -337,11 +380,10 @@
         
         generateBuildings(cameraY);
 
-        // Score Calculation
+        // Score
         let currentHeight = Math.floor(Math.abs(ball.y - (height - 50)) / 10);
         if (currentHeight > score) score = currentHeight;
         
-        // Update Zone Text
         updateZoneUI();
 
         // Death
@@ -364,7 +406,6 @@
     }
 
     function updateZoneUI() {
-        // Find current zone
         let activeZone = ZONES[0];
         for(let z of ZONES) {
             if (score >= z.h) activeZone = z;
@@ -392,16 +433,9 @@
         scoreEl.innerText = `Height: ${score}`;
     }
 
-    // --- Visuals & Rendering ---
+    // --- Visuals ---
     
     function getBackgroundColor() {
-        // Interpolate background based on score
-        // Simple clamp for prototype
-        let factor = Math.min(score / 500, 1); // 0 to 1
-        // Start: #050505 (5,5,5)
-        // End: #2a0a1a (42, 10, 26) -- rough deep space color
-        // Actually let's use the ZONE colors
-        
         let activeZone = ZONES[0];
         for(let z of ZONES) {
             if (score >= z.h) activeZone = z;
@@ -410,13 +444,10 @@
     }
 
     function draw() {
-        // Background
         ctx.fillStyle = getBackgroundColor();
         ctx.fillRect(0, 0, width, height);
 
         ctx.save();
-        
-        // Apply Shake
         if (shakeStrength > 0) {
             let dx = (Math.random() - 0.5) * shakeStrength;
             let dy = (Math.random() - 0.5) * shakeStrength;
@@ -426,7 +457,6 @@
         ctx.translate(0, -cameraY);
 
         // Draw Buildings
-        // Opacity changes with height
         let buildingOpacity = Math.max(0.3, 1 - (score / 800)); 
         ctx.fillStyle = `rgba(100, 100, 100, ${buildingOpacity})`;
         ctx.strokeStyle = `rgba(200, 200, 200, ${buildingOpacity})`;
@@ -436,7 +466,6 @@
             ctx.fillRect(b.x, b.y, b.w, b.h);
             ctx.strokeRect(b.x, b.y, b.w, b.h);
             
-            // Add internal detail lines to make them look like skyscrapers
             ctx.beginPath();
             ctx.moveTo(b.x + b.w/2, b.y);
             ctx.lineTo(b.x + b.w/2, b.y + b.h);
