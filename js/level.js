@@ -30,7 +30,9 @@ export class LevelMaker {
 
             const gapWidth = Utils.random(140, 200);
             const blockHeight = Utils.random(150, 350);
-            const verticalGap = Utils.random(40, 80);
+            // verticalGap is now NEGATIVE — buildings overlap slightly upward
+            // This guarantees no empty space the ball can fall through
+            const verticalGap = Utils.random(-30, 20);
 
             let moveSpeed = 0;
             if (Math.abs(this.spawnerY) > 500) { 
@@ -38,23 +40,23 @@ export class LevelMaker {
                 if (Math.random() > 0.5) moveSpeed *= -1;
             }
 
-            this.spawnerY -= verticalGap;
+            this.spawnerY -= Math.max(0, verticalGap); // Never move spawner UP
 
-            // FIX: Ensure walls are at least 40px wide so they don't vanish
+            // Ensure walls are at least 40px wide so they don't vanish
             const leftW = Math.max(40, centerX - (gapWidth / 2));
             const rightX = Math.min(this.width - 40, centerX + (gapWidth / 2));
             const rightW = this.width - rightX;
 
             if (leftW > 0) {
                 this.buildings.push({ 
-                    x: 0, y: this.spawnerY - blockHeight, w: leftW, h: blockHeight, 
+                    x: 0, y: this.spawnerY - blockHeight, w: leftW, h: blockHeight + 20, 
                     vx: moveSpeed, originW: leftW, maxMove: 60, type: 'left'
                 });
             }
             
             if (rightW > 0) {
                 this.buildings.push({ 
-                    x: rightX, y: this.spawnerY - blockHeight, w: rightW, h: blockHeight, 
+                    x: rightX, y: this.spawnerY - blockHeight, w: rightW, h: blockHeight + 20, 
                     vx: moveSpeed, originX: rightX, maxMove: 60, type: 'right'
                 });
             }
