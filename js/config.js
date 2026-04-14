@@ -4,9 +4,9 @@ export const Config = {
     wallBounce: 0.7,
     jumpPower: 21,
     aimSpeed: 0.04,
-    gripDuration: 90,
-    slipAcceleration: 0.1,
-    maxSlipSpeed: 8.0,
+    gripDuration: 120,
+    slipAcceleration: 0.012,
+    maxSlipSpeed: 1.2,
     zones: [
         { h: 0, name: "The City", color: [20, 20, 20] },
         { h: 50, name: "Skyline", color: [20, 20, 50] },
