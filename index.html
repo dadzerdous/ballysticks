@@ -1,45 +1,652 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Canyon Climber v0.14</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grubby — Wall Climber</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#1a0a2e; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; user-select:none; }
+  #wrapper { position:relative; width:400px; height:600px; }
+  canvas { display:block; width:400px; height:600px; border-radius:16px; cursor:pointer; }
+  #ui { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; border-radius:16px; overflow:hidden; }
+  #score-display { position:absolute; top:16px; left:50%; transform:translateX(-50%); font-family:'Fredoka One',sans-serif; font-size:28px; color:white; text-shadow:0 2px 8px rgba(0,0,0,0.5); }
+  #high-score-display { position:absolute; top:50px; left:50%; transform:translateX(-50%); font-size:13px; color:rgba(255,255,255,0.5); font-weight:700; font-family:'Nunito',sans-serif; }
+  #coin-count { position:absolute; top:16px; right:16px; display:flex; align-items:center; gap:6px; background:rgba(0,0,0,0.3); border-radius:20px; padding:6px 12px; }
+  #coin-count span { font-family:'Fredoka One',sans-serif; font-size:16px; color:#ffd700; }
+  .coin-dot { width:14px; height:14px; background:#ffd700; border-radius:50%; border:2px solid #c9a200; }
+  .screen { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:16px; pointer-events:all; font-family:'Nunito',sans-serif; }
+  #splash { background:linear-gradient(160deg,#1a0a2e 0%,#2d1b4e 50%,#1a0a2e 100%); }
+  #splash h1 { font-family:'Fredoka One',sans-serif; font-size:52px; color:#ffb347; text-shadow:0 4px 20px rgba(255,179,71,0.4); letter-spacing:2px; margin-bottom:4px; }
+  #splash .tagline { font-size:14px; color:rgba(255,255,255,0.45); margin-bottom:32px; letter-spacing:1px; }
+  #splash-canvas { width:120px; height:120px; margin-bottom:28px; }
+  .btn { background:#ffb347; color:#1a0a2e; border:none; border-radius:50px; padding:14px 40px; font-family:'Fredoka One',sans-serif; font-size:20px; cursor:pointer; letter-spacing:1px; transition:transform 0.1s,box-shadow 0.1s; box-shadow:0 4px 0 #c9832a; margin:6px; }
+  .btn:hover { transform:translateY(-2px); box-shadow:0 6px 0 #c9832a; }
+  .btn:active { transform:translateY(2px); box-shadow:0 2px 0 #c9832a; }
+  .btn-sec { background:transparent; color:rgba(255,255,255,0.7); border:1.5px solid rgba(255,255,255,0.3); box-shadow:none; font-size:16px; padding:10px 28px; }
+  .btn-sec:hover { background:rgba(255,255,255,0.1); box-shadow:none; transform:none; }
+  #gameover { background:rgba(20,8,40,0.95); display:none; }
+  #gameover h2 { font-family:'Fredoka One',sans-serif; font-size:40px; color:#ff6b6b; margin-bottom:8px; }
+  #gameover .go-score { font-family:'Fredoka One',sans-serif; font-size:56px; color:#ffb347; margin-bottom:4px; }
+  #gameover .go-best { font-size:14px; color:rgba(255,255,255,0.5); margin-bottom:32px; letter-spacing:1px; }
+  #help { background:rgba(20,8,40,0.97); display:none; padding:32px; text-align:center; }
+  #help h2 { font-family:'Fredoka One',sans-serif; font-size:30px; color:#ffb347; margin-bottom:20px; }
+  .hi { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; text-align:left; }
+  .hico { width:42px; height:42px; border-radius:12px; background:rgba(255,179,71,0.15); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+  .htx strong { display:block; color:white; font-size:14px; margin-bottom:2px; }
+  .htx span { color:rgba(255,255,255,0.5); font-size:12px; line-height:1.4; }
+</style>
 </head>
 <body>
+<div id="wrapper">
+  <canvas id="game"></canvas>
+  <div id="ui">
+    <div id="score-display">0</div>
+    <div id="high-score-display">BEST: 0</div>
+    <div id="coin-count"><div class="coin-dot"></div><span id="coins-val">0</span></div>
+  </div>
 
-    <div id="ui">
-        <h1 id="score">Height: 0</h1>
-        <p id="bits" style="color: #FFD700; font-weight: bold; margin: 5px 0;">Bits: 0</p>
-        <p id="status">Hold to Aim</p>
-    </div>
-    
-    <div id="zone-ui">
-        <div class="zone-name" id="zone-name">THE CITY</div>
-        <div class="best-score" id="best-score">Best: 0</div>
-    </div>
+  <div class="screen" id="splash">
+    <canvas id="splash-canvas" width="120" height="120"></canvas>
+    <h1>GRUBBY</h1>
+    <div class="tagline">hold to aim · release to fly</div>
+    <button class="btn" onclick="startGame()">PLAY</button>
+    <button class="btn btn-sec" onclick="showHelp()">HOW TO PLAY</button>
+  </div>
 
-    <div id="shop-menu" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.95); padding:20px; border:2px solid #00ffcc; z-index:100; text-align:center; min-width:280px; font-family:monospace; box-shadow: 0 0 20px rgba(0,255,204,0.3);">
-        <h2 style="color:#00ffcc; margin-top:0; letter-spacing: 2px;">NINJA SHOP</h2>
-        <p id="shop-bits" style="color:#FFD700; font-size: 18px; margin-bottom: 20px;">Bits: 0</p>
-        
-        <div id="color-list" style="display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin-bottom:25px;"></div>
-        
-        <button id="close-shop" style="background:#444; color:white; border:none; padding:12px 24px; cursor:pointer; font-family:monospace; font-weight:bold; letter-spacing: 1px;">CLOSE</button>
-    </div>
+  <div class="screen" id="help">
+    <h2>How to Play</h2>
+    <div class="hi"><div class="hico">⏳</div><div class="htx"><strong>Hold to aim</strong><span>The arrow sweeps back and forth. Time your release!</span></div></div>
+    <div class="hi"><div class="hico">🚀</div><div class="htx"><strong>Release to launch</strong><span>Grubby flies in the direction the arrow is pointing.</span></div></div>
+    <div class="hi"><div class="hico">🤚</div><div class="htx"><strong>Hold mid-air to go sticky</strong><span>Hold while flying and Grubby grabs the next wall he touches.</span></div></div>
+    <div class="hi"><div class="hico">🪙</div><div class="htx"><strong>Grab coins</strong><span>Yellow = easy (near walls). Orange = risky but worth 5x!</span></div></div>
+    <button class="btn" onclick="hideHelp()">GOT IT</button>
+  </div>
 
-    <button id="open-shop-btn" 
-        onmousedown="event.stopPropagation()" 
-        ontouchstart="event.stopPropagation()"
-        style="position:absolute; bottom:20px; left:20px; background:#00ffcc; border:none; padding:12px 20px; font-family:monospace; font-weight:bold; cursor:pointer; z-index:10; box-shadow: 2px 2px 0px #000;">
-    SHOP
-</button>
+  <div class="screen" id="gameover">
+    <h2>SPLAT!</h2>
+    <div class="go-score" id="go-score">0</div>
+    <div class="go-best" id="go-best">BEST: 0</div>
+    <button class="btn" onclick="startGame()">TRY AGAIN</button>
+    <button class="btn btn-sec" onclick="showHelp()">HELP</button>
+  </div>
+</div>
+<script>
+// ── Setup ─────────────────────────────────────────────
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 400; canvas.height = 600;
+const SC = document.getElementById('splash-canvas');
+const sCtx = SC.getContext('2d');
 
-    
-    <div id="version">v0.15 GitHub</div>
-    
-    <canvas id="gameCanvas"></canvas>
+// COORDINATE SYSTEM:
+// World Y = 0 at ground. Positive Y = UP (Grubby climbs into positive Y).
+// Screen Y = canvas.height - (worldY - camWorldY)
+// camWorldY = world Y shown at the BOTTOM of the screen.
+// As Grubby climbs, camWorldY increases, screen scrolls up.
 
-    <script type="module" src="js/main.js"></script>
+let highScore = parseInt(localStorage.getItem('grubbyHigh')||'0');
+let totalCoins = parseInt(localStorage.getItem('grubbyCoins')||'0');
+let gameState = 'splash';
+let score = 0;
+let animFrame, splashRAF, lastTime = 0;
+
+// Camera: world Y at the bottom of screen
+let camWorldY = 0;
+
+// World-to-screen
+function toScreenY(worldY) { return canvas.height - (worldY - camWorldY); }
+function toWorldY(screenY)  { return camWorldY + (canvas.height - screenY); }
+
+// ── Biomes ────────────────────────────────────────────
+const BIOMES = [
+  { name:'jungle',  sky:'#0d2b1a', wall:'#2d6e4e', wallLight:'#3a9e6a' },
+  { name:'cave',    sky:'#0d0d1a', wall:'#3a3a5c', wallLight:'#5a5a8c' },
+  { name:'ice',     sky:'#0a1a2a', wall:'#2c5f8a', wallLight:'#4a8fba' },
+  { name:'volcano', sky:'#1a0500', wall:'#6b2000', wallLight:'#a03010' },
+  { name:'space',   sky:'#000010', wall:'#1a1a3a', wallLight:'#2a2a5a' },
+];
+function getBiome() {
+  return BIOMES[Math.min(Math.floor(camWorldY/300), BIOMES.length-1)];
+}
+
+// ── Terrain ───────────────────────────────────────────
+// Segments: worldY based. topY < botY, both in world coords (higher number = higher up).
+// Each segment covers worldY from botY (lower) to topY (higher/above).
+// Actually let's keep topY as the LOWER world Y and botY as HIGHER world Y for clarity.
+// Segment: { lo: lower world Y, hi: upper world Y, leftPts[], rightPts[] }
+// Points sorted from lo to hi (ascending world Y).
+
+const WALL_INSET = 52;
+const SEG_H = 90;
+let segments = [];
+
+function styleRoll() {
+  const r = Math.random();
+  return r < 0.4 ? 'smooth' : r < 0.72 ? 'bumpy' : 'jagged';
+}
+
+function buildEdge(side, loY, hiY, style) {
+  const steps = Math.ceil((hiY - loY) / 10);
+  const pts = [];
+  const base = side === 'left' ? WALL_INSET : canvas.width - WALL_INSET;
+  const dir  = side === 'left' ? 1 : -1;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const wy = loY + t * (hiY - loY);
+    let d = 0;
+    if (style === 'smooth') {
+      d = Math.sin(t * Math.PI * 1.4 + 0.3) * 13;
+    } else if (style === 'bumpy') {
+      d = Math.sin(t * Math.PI * 3.1) * 16 + Math.sin(t * Math.PI * 6.7 + 1) * 6;
+    } else {
+      d = Math.abs(Math.sin(t * 28.3 + 1.1) * 14 + Math.sin(t * 13.7 + 2.5) * 8);
+    }
+    pts.push({ x: base + dir * d, wy });
+  }
+  return pts;
+}
+
+function genSeg(loY) {
+  const hiY = loY + SEG_H;
+  const ls = styleRoll();
+  const rs = Math.random() < 0.1 ? styleRoll() : ls;
+  segments.push({ loY, hiY, leftPts: buildEdge('left',loY,hiY,ls), rightPts: buildEdge('right',loY,hiY,rs) });
+}
+
+function ensureTerrain() {
+  if (segments.length === 0) {
+    // Seed from below ground to well above starting view
+    for (let y = -SEG_H; y < canvas.height + 800; y += SEG_H) genSeg(y);
+  }
+  // Highest segment top
+  const highestHi = Math.max(...segments.map(s => s.hiY));
+  const viewTop = camWorldY + canvas.height + 300;
+  while (highestHi < viewTop) genSeg(highestHi);
+  // Prune far below camera
+  segments = segments.filter(s => s.hiY > camWorldY - 200);
+}
+
+function wallX(side, worldY) {
+  for (const seg of segments) {
+    if (worldY >= seg.loY && worldY <= seg.hiY) {
+      const pts = side === 'left' ? seg.leftPts : seg.rightPts;
+      const t = (worldY - seg.loY) / (seg.hiY - seg.loY);
+      const i = Math.min(Math.floor(t * (pts.length-1)), pts.length-2);
+      const f = t * (pts.length-1) - i;
+      return pts[i].x + f * (pts[i+1].x - pts[i].x);
+    }
+  }
+  return side === 'left' ? WALL_INSET : canvas.width - WALL_INSET;
+}
+
+// ── Coins ─────────────────────────────────────────────
+let coins = [];
+let coinsGenHi = 0; // highest world Y we've generated coins up to
+
+function spawnCoins(fromY, toY) {
+  // fromY < toY (generate upward)
+  for (let wy = fromY + 55; wy < toY; wy += 55) {
+    const r = Math.random();
+    if (r < 0.55) {
+      const side = Math.random() < 0.5 ? 'left' : 'right';
+      const wx = wallX(side, wy);
+      coins.push({ x: wx + (side==='left'?20:-20), wy, r:7, rare:false, collected:false });
+    } else if (r < 0.72) {
+      coins.push({ x: canvas.width/2+(Math.random()-0.5)*70, wy, r:9, rare:true, collected:false });
+    }
+  }
+  coinsGenHi = toY;
+}
+
+// ── Grubby ────────────────────────────────────────────
+// G.wy = world Y (increases as he climbs up)
+const G = {
+  x: canvas.width/2, wy: 16,
+  vx:0, vy:0,
+  onWall: 'ground', // 'left'|'right'|'ground'|null
+  sticky: false,
+  squish:0, squishTimer:0,
+  charging:false,
+  aimAngle: Math.PI/2,  // in standard math: PI/2 = straight up
+  aimDir: 1, aimSpeed: 2.2,
+  hatAngle: 0, whiskerPhase: 0,
+};
+
+function resetGrubby() {
+  G.x = canvas.width/2; G.wy = 16;
+  G.vx = 0; G.vy = 0;
+  G.onWall = 'ground';
+  G.sticky = false;
+  G.squish = 0; G.squishTimer = 0;
+  G.charging = false;
+  G.aimAngle = Math.PI/2; // straight up
+  G.aimDir = 1; G.aimSpeed = 2.2;
+  G.hatAngle = 0; G.whiskerPhase = 0;
+}
+
+// ── Input ─────────────────────────────────────────────
+let pressing = false;
+function onPress() {
+  if (gameState !== 'playing') return;
+  pressing = true;
+  if (G.onWall) G.charging = true;
+  else G.sticky = true;
+}
+function onRelease() {
+  if (gameState !== 'playing') return;
+  pressing = false;
+  if (G.charging && G.onWall) {
+    // aimAngle: PI/2=up, 0=right, PI=left
+    // vx = cos(aimAngle) * speed, vy = sin(aimAngle) * speed (positive vy = up)
+    const speed = 13.5;
+    G.vx = Math.cos(G.aimAngle) * speed;
+    G.vy = Math.sin(G.aimAngle) * speed;
+    G.onWall = null; G.charging = false; G.sticky = false;
+  } else {
+    G.sticky = false;
+  }
+}
+canvas.addEventListener('mousedown',  e=>{ e.preventDefault(); onPress(); });
+canvas.addEventListener('mouseup',    e=>{ e.preventDefault(); onRelease(); });
+canvas.addEventListener('mouseleave', ()=>{ if(pressing) onRelease(); });
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); onPress(); },{passive:false});
+canvas.addEventListener('touchend',   e=>{ e.preventDefault(); onRelease(); },{passive:false});
+
+// ── Particles ─────────────────────────────────────────
+let particles = [];
+function spawnPop(x, screenY, rare) {
+  for (let i=0;i<7;i++) {
+    const a=Math.random()*Math.PI*2, sp=1.5+Math.random()*3;
+    particles.push({x,y:screenY,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,life:1,color:rare?'#ff8050':'#ffd700',r:rare?4:3});
+  }
+}
+function updateParticles() {
+  for (const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life-=0.04;}
+  particles=particles.filter(p=>p.life>0);
+}
+
+// ── Physics ───────────────────────────────────────────
+const GRAVITY = 0.38; // world units/frame² (downward = negative vy)
+const R = 15;
+
+function updatePhysics() {
+  // Sweep aim pendulum
+  if (G.charging && G.onWall) {
+    G.aimAngle += G.aimSpeed * G.aimDir * (1/60);
+    let lo, hi;
+    // Math angles: 0=right, PI/2=up, PI=left
+    // Left wall: only sweep right half (0 to PI/2) — never point left into wall
+    // Right wall: only sweep left half (PI/2 to PI) — never point right into wall
+    // Ground: full upward arc
+    if      (G.onWall === 'left')  { lo = 0.15;        hi = Math.PI/2 + 0.3; }
+    else if (G.onWall === 'right') { lo = Math.PI/2 - 0.3; hi = Math.PI-0.15; }
+    else                           { lo = 0.15;        hi = Math.PI-0.15; }
+    if (G.aimAngle >= hi) { G.aimAngle = hi; G.aimDir = -1; }
+    if (G.aimAngle <= lo) { G.aimAngle = lo; G.aimDir =  1; }
+    return;
+  }
+  if (G.onWall) return;
+
+  // Gravity pulls down (negative vy)
+  G.vy -= GRAVITY;
+  G.x  += G.vx;
+  G.wy += G.vy;
+  G.whiskerPhase += 0.18;
+
+  const lx = wallX('left',  G.wy);
+  const rx = wallX('right', G.wy);
+
+  if (G.x - R <= lx) {
+    G.x = lx + R;
+    if (G.sticky) { G.vx=0; G.vy=0; G.onWall='left'; onLand(); }
+    else { G.vx = Math.abs(G.vx)*0.35; }
+  } else if (G.x + R >= rx) {
+    G.x = rx - R;
+    if (G.sticky) { G.vx=0; G.vy=0; G.onWall='right'; onLand(); }
+    else { G.vx = -Math.abs(G.vx)*0.35; }
+  }
+
+  // Ground
+  if (G.wy <= R) {
+    G.wy = R; G.vx=0; G.vy=0;
+    G.onWall = 'ground';
+    onLand();
+  }
+
+  // Only die if fallen below ground level
+  if (G.wy < -100) { endGame(); return; }
+
+  // Camera: keep Grubby at ~40% from top of screen
+  const targetScreenY = canvas.height * 0.40;
+  const currentScreenY = toScreenY(G.wy);
+  if (currentScreenY < targetScreenY) {
+    // Grubby is too high on screen, scroll camera up
+    camWorldY += (targetScreenY - currentScreenY) * 0.09;
+  }
+
+  // Score = max height reached
+  const h = Math.floor(G.wy / 8);
+  if (h > score) score = h;
+
+  // Spawn coins ahead
+  if (coinsGenHi < camWorldY + canvas.height + 300) {
+    spawnCoins(coinsGenHi, camWorldY + canvas.height + 500);
+  }
+
+  // Collect coins
+  const sy = toScreenY(G.wy);
+  for (const c of coins) {
+    if (c.collected) continue;
+    const csy = toScreenY(c.wy);
+    if (Math.hypot(G.x-c.x, sy-csy) < R+c.r+3) {
+      c.collected = true;
+      totalCoins += c.rare?5:1;
+      localStorage.setItem('grubbyCoins', totalCoins);
+      spawnPop(c.x, csy, c.rare);
+    }
+  }
+}
+
+function onLand() {
+  G.squish=1; G.squishTimer=0;
+  G.sticky=false;
+  // Start aim pointing straight up (away from all walls), sweep outward
+  G.aimAngle = Math.PI/2;
+  G.aimDir = G.onWall === 'left' ? 1 : G.onWall === 'right' ? -1 : 1;
+  if (pressing) G.charging = true;
+}
+
+// ── Draw ──────────────────────────────────────────────
+function drawTerrain() {
+  const biome = getBiome();
+  ctx.fillStyle = biome.sky;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  if (biome.name==='space') {
+    ctx.fillStyle='white';
+    for(let i=0;i<50;i++){
+      ctx.beginPath();
+      ctx.arc((i*137+camWorldY*0.05)%canvas.width,(i*97+camWorldY*0.03)%canvas.height,0.7,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  for (const seg of segments) {
+    const sLo = toScreenY(seg.loY); // screen Y of lower world edge (appears lower on screen = larger screenY)
+    const sHi = toScreenY(seg.hiY); // screen Y of upper world edge (appears higher = smaller screenY)
+    if (sHi > canvas.height+10 || sLo < -10) continue;
+
+    // Left wall: fill from left edge to wall surface
+    ctx.beginPath();
+    ctx.moveTo(0, sLo);
+    for (const p of seg.leftPts) ctx.lineTo(p.x, toScreenY(p.wy));
+    ctx.lineTo(0, sHi);
+    ctx.closePath();
+    ctx.fillStyle=biome.wall; ctx.fill();
+
+    ctx.beginPath();
+    let first=true;
+    for (const p of seg.leftPts) {
+      const sy2 = toScreenY(p.wy);
+      if(first){ctx.moveTo(p.x,sy2);first=false;}
+      else ctx.lineTo(p.x,sy2);
+    }
+    ctx.strokeStyle=biome.wallLight; ctx.lineWidth=2.5; ctx.stroke();
+
+    // Right wall
+    ctx.beginPath();
+    ctx.moveTo(canvas.width, sLo);
+    for (const p of seg.rightPts) ctx.lineTo(p.x, toScreenY(p.wy));
+    ctx.lineTo(canvas.width, sHi);
+    ctx.closePath();
+    ctx.fillStyle=biome.wall; ctx.fill();
+
+    ctx.beginPath();
+    first=true;
+    for (const p of seg.rightPts) {
+      const sy2=toScreenY(p.wy);
+      if(first){ctx.moveTo(p.x,sy2);first=false;}
+      else ctx.lineTo(p.x,sy2);
+    }
+    ctx.strokeStyle=biome.wallLight; ctx.lineWidth=2.5; ctx.stroke();
+  }
+
+  // Ground floor
+  const groundSY = toScreenY(0);
+  if (groundSY < canvas.height+20) {
+    ctx.fillStyle=biome.wall;
+    ctx.fillRect(0, groundSY, canvas.width, canvas.height-groundSY+10);
+    ctx.strokeStyle=biome.wallLight; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(0,groundSY); ctx.lineTo(canvas.width,groundSY); ctx.stroke();
+  }
+}
+
+function drawCoins() {
+  const t = Date.now()/600;
+  for (const c of coins) {
+    if(c.collected) continue;
+    const sy=toScreenY(c.wy);
+    if(sy<-20||sy>canvas.height+20) continue;
+    const bob=Math.sin(t+c.x*0.05)*2;
+    ctx.save(); ctx.translate(c.x,sy+bob);
+    ctx.beginPath(); ctx.arc(0,0,c.r,0,Math.PI*2);
+    ctx.fillStyle=c.rare?'#ff8050':'#ffd700'; ctx.fill();
+    ctx.strokeStyle=c.rare?'#c05020':'#c9a200'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle=c.rare?'rgba(255,180,140,0.55)':'rgba(255,240,150,0.55)';
+    ctx.beginPath(); ctx.arc(-c.r*.25,-c.r*.25,c.r*.35,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawGrubby() {
+  const airborne = !G.onWall;
+  if(G.squish>0){G.squishTimer+=0.12;G.squish=Math.max(0,1-G.squishTimer*G.squishTimer*0.9);}
+  const sq=G.squish;
+  const rx=airborne?14:14+sq*13;
+  const ry=airborne?17:17-sq*9;
+
+  const sy = toScreenY(G.wy);
+
+  let tHat = G.onWall==='left'?28:G.onWall==='right'?-28:G.onWall==='ground'?0:G.vx*1.8;
+  G.hatAngle+=(tHat-G.hatAngle)*0.14;
+
+  ctx.save(); ctx.translate(G.x, sy);
+
+  ctx.beginPath(); ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);
+  ctx.fillStyle='#ffb347'; ctx.fill();
+  ctx.strokeStyle='#e8932a'; ctx.lineWidth=1.8; ctx.stroke();
+
+  ctx.beginPath(); ctx.ellipse(0,ry*.18,rx*.5,ry*.42,0,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,220,150,0.45)'; ctx.fill();
+
+  if(sq>0.25&&G.onWall){
+    ctx.fillStyle='rgba(255,170,60,0.45)';
+    const bs=G.onWall==='left'?-1:G.onWall==='right'?1:0;
+    if(bs!==0){
+      ctx.beginPath();ctx.ellipse(bs*rx*.85,-ry*.35,9*sq,5*sq,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(bs*rx*.85, ry*.35,7*sq,4*sq,0,0,Math.PI*2);ctx.fill();
+    } else {
+      ctx.beginPath();ctx.ellipse(-rx*.8,ry*.6,8*sq,4*sq,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse( rx*.8,ry*.6,8*sq,4*sq,0,0,Math.PI*2);ctx.fill();
+    }
+  }
+
+  const eyeY=-ry*.22, eyeSp=rx*.36;
+  ctx.fillStyle='white';
+  ctx.beginPath();ctx.ellipse(-eyeSp,eyeY,4.5,5.5,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse( eyeSp,eyeY,4.5,5.5,0,0,Math.PI*2);ctx.fill();
+  const py=airborne?eyeY-1.5:eyeY+.5;
+  ctx.fillStyle='#222';
+  ctx.beginPath();ctx.arc(-eyeSp+.5,py,2.5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc( eyeSp+.5,py,2.5,0,Math.PI*2);ctx.fill();
+
+  ctx.fillStyle='rgba(255,120,70,0.32)';
+  ctx.beginPath();ctx.ellipse(-eyeSp-1,eyeY+5,5,3,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse( eyeSp+1,eyeY+5,5,3,0,0,Math.PI*2);ctx.fill();
+
+  ctx.beginPath();ctx.arc(0,ry*.16,rx*.28,.2,Math.PI-.2);
+  ctx.strokeStyle='#c97020';ctx.lineWidth=1.5;ctx.stroke();
+
+  const wf=airborne?Math.sin(G.whiskerPhase)*9:0;
+  ctx.strokeStyle='rgba(170,90,15,0.65)';ctx.lineWidth=1.1;
+  ctx.beginPath();ctx.moveTo(-rx*.5,eyeY+2); ctx.lineTo(-rx*.5-15+wf,   eyeY-3+wf*.3);  ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-rx*.5,eyeY+6); ctx.lineTo(-rx*.5-15+wf*.6,eyeY+6);         ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-rx*.5,eyeY+10);ctx.lineTo(-rx*.5-13+wf*.4,eyeY+14-wf*.2); ctx.stroke();
+  ctx.beginPath();ctx.moveTo( rx*.5,eyeY+2); ctx.lineTo( rx*.5+15-wf,   eyeY-3-wf*.3);  ctx.stroke();
+  ctx.beginPath();ctx.moveTo( rx*.5,eyeY+6); ctx.lineTo( rx*.5+15-wf*.6,eyeY+6);         ctx.stroke();
+  ctx.beginPath();ctx.moveTo( rx*.5,eyeY+10);ctx.lineTo( rx*.5+13-wf*.4,eyeY+14+wf*.2); ctx.stroke();
+
+  ctx.save();
+  ctx.rotate(G.hatAngle*Math.PI/180);
+  const hy=-ry-3;
+  ctx.beginPath();ctx.ellipse(0,hy-4,16,12,0,Math.PI,Math.PI*2);
+  ctx.fillStyle='#f5c518';ctx.fill();ctx.strokeStyle='#c9a200';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.ellipse(0,hy+2,21,5.5,0,0,Math.PI*2);
+  ctx.fillStyle='#f5c518';ctx.fill();ctx.strokeStyle='#c9a200';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-15,hy);ctx.lineTo(15,hy);
+  ctx.strokeStyle='#c9a200';ctx.lineWidth=2;ctx.stroke();
+  ctx.restore();
+
+  if(G.sticky&&!G.onWall){
+    ctx.beginPath();ctx.ellipse(0,0,rx+7,ry+7,0,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,220,80,0.45)';ctx.lineWidth=3;
+    ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
+  }
+
+  ctx.restore();
+}
+
+function drawAim() {
+  if(!G.charging||!G.onWall) return;
+  const sy = toScreenY(G.wy);
+  const len=62;
+  ctx.save();
+  ctx.translate(G.x,sy);
+
+  // Sweep range arc (faint)
+  let lo,hi;
+  if(G.onWall==='left'){lo=0.15;hi=Math.PI/2+0.3;}
+  else if(G.onWall==='right'){lo=Math.PI/2-0.3;hi=Math.PI-0.15;}
+  else{lo=0.15;hi=Math.PI-0.15;}
+
+  // Canvas arc goes clockwise; our angles are math convention (CCW from right).
+  // To draw on canvas: canvas angle = -mathAngle (since canvas Y is flipped)
+  ctx.beginPath();
+  ctx.arc(0,0,len*.72,-hi,-lo);
+  ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=10;ctx.stroke();
+
+  // Arrow — canvas rotation: negate math angle because canvas Y flips
+  ctx.rotate(-G.aimAngle);
+  ctx.setLineDash([5,4]);
+  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(len,0);
+  ctx.strokeStyle='rgba(255,255,255,0.85)';ctx.lineWidth=2.5;ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(len,0);ctx.lineTo(len-12,-5);ctx.lineTo(len-12,5);ctx.closePath();
+  ctx.fillStyle='rgba(255,220,80,0.95)';ctx.fill();
+
+  ctx.restore();
+}
+
+function drawParticles() {
+  for(const p of particles){
+    ctx.globalAlpha=p.life;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle=p.color;ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+// ── Splash ────────────────────────────────────────────
+let sT=0;
+function animateSplash(){
+  sT+=0.04;
+  sCtx.clearRect(0,0,120,120);
+  sCtx.save();sCtx.translate(60,68+Math.sin(sT)*4);
+  sCtx.beginPath();sCtx.ellipse(0,0,26,30,0,0,Math.PI*2);
+  sCtx.fillStyle='#ffb347';sCtx.fill();sCtx.strokeStyle='#e8932a';sCtx.lineWidth=2;sCtx.stroke();
+  sCtx.beginPath();sCtx.ellipse(0,6,14,13,0,0,Math.PI*2);
+  sCtx.fillStyle='rgba(255,220,150,0.45)';sCtx.fill();
+  sCtx.fillStyle='white';
+  sCtx.beginPath();sCtx.ellipse(-9,-7,5,6,0,0,Math.PI*2);sCtx.fill();
+  sCtx.beginPath();sCtx.ellipse(9,-7,5,6,0,0,Math.PI*2);sCtx.fill();
+  sCtx.fillStyle='#222';
+  sCtx.beginPath();sCtx.arc(-8,-7,2.5,0,Math.PI*2);sCtx.fill();
+  sCtx.beginPath();sCtx.arc(10,-7,2.5,0,Math.PI*2);sCtx.fill();
+  const wf=Math.sin(sT*1.4)*4;
+  sCtx.strokeStyle='rgba(170,90,15,0.65)';sCtx.lineWidth=1.1;
+  sCtx.beginPath();sCtx.moveTo(-12,-3);sCtx.lineTo(-28+wf,-6);sCtx.stroke();
+  sCtx.beginPath();sCtx.moveTo(-12,1);sCtx.lineTo(-28+wf*.6,1);sCtx.stroke();
+  sCtx.beginPath();sCtx.moveTo(-12,5);sCtx.lineTo(-26+wf*.4,8);sCtx.stroke();
+  sCtx.beginPath();sCtx.moveTo(12,-3);sCtx.lineTo(28-wf,-6);sCtx.stroke();
+  sCtx.beginPath();sCtx.moveTo(12,1);sCtx.lineTo(28-wf*.6,1);sCtx.stroke();
+  sCtx.beginPath();sCtx.moveTo(12,5);sCtx.lineTo(26-wf*.4,8);sCtx.stroke();
+  sCtx.fillStyle='rgba(255,120,70,0.32)';
+  sCtx.beginPath();sCtx.ellipse(-13,-2,5,3,0,0,Math.PI*2);sCtx.fill();
+  sCtx.beginPath();sCtx.ellipse(13,-2,5,3,0,0,Math.PI*2);sCtx.fill();
+  sCtx.save();sCtx.rotate(0.18);
+  sCtx.beginPath();sCtx.ellipse(0,-38,15,11,0,Math.PI,Math.PI*2);
+  sCtx.fillStyle='#f5c518';sCtx.fill();sCtx.strokeStyle='#c9a200';sCtx.lineWidth=1;sCtx.stroke();
+  sCtx.beginPath();sCtx.ellipse(0,-30,20,5,0,0,Math.PI*2);
+  sCtx.fillStyle='#f5c518';sCtx.fill();sCtx.strokeStyle='#c9a200';sCtx.stroke();
+  sCtx.beginPath();sCtx.moveTo(-14,-34);sCtx.lineTo(14,-34);
+  sCtx.strokeStyle='#c9a200';sCtx.lineWidth=2;sCtx.stroke();
+  sCtx.restore();sCtx.restore();
+  splashRAF=requestAnimationFrame(animateSplash);
+}
+
+// ── Loop ──────────────────────────────────────────────
+function gameLoop(ts){
+  const dt=Math.min((ts-lastTime)/16,3);lastTime=ts;
+  ensureTerrain();
+  updatePhysics();
+  updateParticles();
+  drawTerrain();drawCoins();drawGrubby();drawAim();drawParticles();
+  document.getElementById('score-display').textContent=score;
+  document.getElementById('high-score-display').textContent='BEST: '+highScore;
+  document.getElementById('coins-val').textContent=totalCoins;
+  animFrame=requestAnimationFrame(gameLoop);
+}
+
+function startGame(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('gameover').style.display='none';
+  document.getElementById('help').style.display='none';
+  if(splashRAF){cancelAnimationFrame(splashRAF);splashRAF=null;}
+  score=0;camWorldY=0;
+  segments=[];coins=[];particles=[];coinsGenHi=0;
+  ensureTerrain();
+  spawnCoins(0,600);
+  resetGrubby();
+  gameState='playing';
+  if(animFrame)cancelAnimationFrame(animFrame);
+  lastTime=performance.now();
+  animFrame=requestAnimationFrame(gameLoop);
+}
+
+function endGame(){
+  gameState='dead';
+  if(score>highScore){highScore=score;localStorage.setItem('grubbyHigh',highScore);}
+  document.getElementById('go-score').textContent=score;
+  document.getElementById('go-best').textContent='BEST: '+highScore;
+  document.getElementById('gameover').style.display='flex';
+  cancelAnimationFrame(animFrame);
+}
+
+function showHelp(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('help').style.display='flex';
+}
+function hideHelp(){
+  document.getElementById('help').style.display='none';
+  document.getElementById('splash').style.display='flex';
+  if(!splashRAF)animateSplash();
+}
+
+document.getElementById('high-score-display').textContent='BEST: '+highScore;
+document.getElementById('coins-val').textContent=totalCoins;
+animateSplash();
+</script>
 </body>
 </html>
